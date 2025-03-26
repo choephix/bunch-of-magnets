@@ -343,15 +343,17 @@ export default function Home() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading || magnetLinks.length === 0}
-            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-          >
-            {isLoading
-              ? "Adding..."
-              : `Add ${magnetLinks.length} Torrents`}
-          </button>
+          {magnetLinks.length > 0 && (
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              {isLoading
+                ? "Adding..."
+                : `Add ${magnetLinks.length} Torrents`}
+            </button>
+          )}
         </form>
 
         {status && (
