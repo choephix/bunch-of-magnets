@@ -227,7 +227,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6">
       <main className="max-w-2xl mx-auto">
         <h1 className="text-xl py-2 font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          Bulk Magnet Links
+          Bunch of Magnets
         </h1>
 
         <button
@@ -272,7 +272,7 @@ export default function Home() {
                 value={magnetInput}
                 onChange={handleMagnetInput}
                 className="w-full h-12 p-2 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none"
-                placeholder="magnet:?xt=urn:btih:... or https://..."
+                placeholder="Paste magnet link here (magnet:?xt=...) or a website url with a bunch of magnet links."
               />
               {isExtracting && (
                 <p className="px-2 text-xs text-blue-400">
