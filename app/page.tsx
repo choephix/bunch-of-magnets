@@ -328,7 +328,11 @@ export default function Home() {
                         </div>
                         {!("status" in item) && (
                           <button
-                            onClick={() => removeMagnetLink(index)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeMagnetLink(index);
+                            }}
                             className="ml-2 px-2 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500 focus:ring-offset-1 focus:ring-offset-gray-900 rounded text-2xl font-medium hover:bg-gray-800/50"
                             aria-label="Remove magnet link"
                           >
