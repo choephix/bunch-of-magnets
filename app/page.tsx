@@ -282,16 +282,16 @@ export default function Home() {
               {(magnetLinks.length > 0 || torrentStatuses.length > 0) && (
                 <>
                   <div className="h-px bg-gray-700" />
-                  <div className="p-2 space-y-1">
+                  <div className="space-y-1">
                     {(torrentStatuses.length > 0
                       ? torrentStatuses
                       : magnetLinks
                     ).map((item, index) => (
                       <div
                         key={index}
-                        className="text-xs p-1.5 hover:bg-gray-800 rounded text-gray-200 transition-colors flex items-center group"
+                        className="text-xs hover:bg-gray-800 rounded text-gray-200 transition-colors flex items-center group"
                       >
-                        <div className="flex-1 min-w-0 flex items-center space-x-2">
+                        <div className="flex-1 min-w-0 flex items-center space-x-2 px-4">
                           <span
                             className="truncate"
                             title={
@@ -329,7 +329,7 @@ export default function Home() {
                         {!("status" in item) && (
                           <button
                             onClick={() => removeMagnetLink(index)}
-                            className="ml-2 p-0.5 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500 focus:ring-offset-1 focus:ring-offset-gray-900 rounded"
+                            className="ml-2 px-2 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500 focus:ring-offset-1 focus:ring-offset-gray-900 rounded text-2xl font-medium hover:bg-gray-800/50"
                             aria-label="Remove magnet link"
                           >
                             ×
