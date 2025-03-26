@@ -16,11 +16,7 @@ export async function POST(request: Request) {
     const response = await fetch(url);
     const html = await response.text();
 
-    // Find all href attributes that contain magnet links
-    const magnetRegex = /href="(magnet:\?xt=urn:btih:[^"]+)"/g;
-    const matches = [...html.matchAll(magnetRegex)];
-    
-    const magnetUrls = matches.map(match => match[1]);
+    const magnetUrls = extractMagnetUrls(html);
     const magnetLinks = parseMagnetLinks(magnetUrls.join("\n"));
 
     console.log("🔍 Found magnet links:", magnetLinks.length);
@@ -33,4 +29,15 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Extracts magnet URLs from an HTML string using regex pattern matching
+ * @param html - The HTML string to search for magnet URLs
+ * @returns Array of magnet URLs found in the HTML
+ */
+function extractMagnetUrls(html: string): string[] {
+  const magnetRegex = /href="(magnet:\?xt=urn:btih:[^"]+)"/g;
+  const matches = [...html.matchAll(magnetRegex)];
+  return matches.map(match => match[1]);
 } 
