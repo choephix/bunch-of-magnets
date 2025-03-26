@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { MagnetLink, debounce, parseMagnetLinks, parseTags } from "./utils/magnet";
 
 type TorrentStatus = {
@@ -22,6 +22,26 @@ export default function Home() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [qbittorrentUrl, setQbittorrentUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        console.log('⚙️ Fetching configuration...');
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        if (response.ok) {
+          setQbittorrentUrl(data.qbittorrentUrl);
+        } else {
+          console.error('❌ Failed to fetch configuration:', data.error);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching configuration:', error);
+      }
+    };
+
+    fetchConfig();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -369,6 +389,19 @@ export default function Home() {
             }`}
           >
             {status.message}
+          </div>
+        )}
+
+        {qbittorrentUrl && (
+          <div className="mt-4 text-center">
+            <a
+              href={qbittorrentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-400 hover:text-blue-400 transition-colors"
+            >
+              Open qBittorrent Web UI →
+            </a>
           </div>
         )}
       </main>
