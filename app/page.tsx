@@ -268,23 +268,26 @@ export default function Home() {
     const parts = savePath.split('/').filter(Boolean);
     const minParts = 5; // /storage/Library/<library>/<showname>/<season>
 
-    // Ensure we have at least the minimum parts
-    while (parts.length < minParts) {
+    // Determine the target index based on suggestion type
+    const targetIndex = suggestion.type === "library" ? 2 :
+                       suggestion.type === "showname" ? 3 :
+                       suggestion.type === "season" ? 4 : -1;
+
+    if (targetIndex === -1) return;
+
+    // Ensure we have enough parts to the left
+    while (parts.length <= targetIndex) {
       if (parts.length === 0) parts.push('storage');
       else if (parts.length === 1) parts.push('Library');
-      else if (parts.length === 2) parts.push('Temp');
-      else if (parts.length === 3) parts.push('Unknown');
-      else if (parts.length === 4) parts.push('Season 1');
+      else if (parts.length === 2) parts.push('_');
+      else if (parts.length === 3) parts.push('_');
+      else if (parts.length === 4) parts.push('_');
     }
 
-    // Update the relevant part based on suggestion type
-    if (suggestion.type === "library") {
-      parts[2] = suggestion.value as string;
-    } else if (suggestion.type === "showname") {
-      parts[3] = suggestion.value as string;
-    } else if (suggestion.type === "season") {
-      parts[4] = `Season ${suggestion.value}`;
-    }
+    // Update the target part
+    parts[targetIndex] = suggestion.type === "season" 
+      ? `Season ${suggestion.value}`
+      : suggestion.value as string;
 
     // Reconstruct the path
     const newPath = `/${parts.join('/')}/`;
