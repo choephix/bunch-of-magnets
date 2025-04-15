@@ -19,7 +19,7 @@ const initialState: State = {
     { type: "library", value: "Live Action Series" },
     { type: "library", value: "Anime Series" },
   ],
-  savePath: "/storage/Library/Temp/",
+  savePath: "/storage/Library/_/",
 };
 
 export const store = proxy<State>(initialState);
