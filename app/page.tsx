@@ -82,6 +82,26 @@ export default function Home() {
       if (newLinks.length > 0) {
         console.log("✨ Adding new unique links:", newLinks.length);
         setMagnetLinks((prev) => [...prev, ...newLinks]);
+        
+        // Parse the first torrent name
+        if (newLinks[0]?.displayName) {
+          fetch('/api/parse-tv-shows', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              filenames: [newLinks[0].displayName]
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            console.log('📺 Parsed TV show name:', data.showNames[0]);
+          })
+          .catch(error => {
+            console.error('❌ Error parsing TV show name:', error);
+          });
+        }
       } else {
         console.log("⚠️ No new unique links found");
       }
