@@ -6,6 +6,7 @@ import { fetchConfig } from './services/configService';
 import { addTorrents } from './services/qbittorrentService';
 import { actions, useStore } from './store';
 import { MagnetLink, debounce, parseMagnetLinks } from './utils/magnet';
+import { MagnetExtractionLoader } from './components/MagnetExtractionLoader';
 
 export default function Home() {
   const [magnetInput, setMagnetInput] = useState('');
@@ -234,9 +235,7 @@ export default function Home() {
                 <>
                   <div className='h-px bg-gray-700' />
                   {isExtracting && (
-                    <p className='px-4 py-2 text-xs text-blue-400'>
-                      🔍 Extracting magnet links from URL...
-                    </p>
+                    <MagnetExtractionLoader />
                   )}
                   <div className='space-y-1'>
                     {magnetLinks.map((item, index) => (
