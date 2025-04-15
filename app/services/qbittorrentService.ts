@@ -1,6 +1,6 @@
 import { MagnetLink } from '../utils/magnet';
 
-export async function addTorrents(magnetLinks: MagnetLink[], savePath: string, category: string, tags: string[]): Promise<void> {
+export async function addTorrents(magnetLinks: readonly MagnetLink[], savePath: string, category: string, tags: string[]): Promise<void> {
   try {
     const response = await fetch('/api/qbittorrent', {
       method: 'POST',
