@@ -10,7 +10,7 @@ if (!QBITTORRENT_URL || !QBITTORRENT_USERNAME || !QBITTORRENT_PASSWORD) {
 
 async function login() {
   const response = await fetch(
-    `${QBITTORRENT_URL}/api/v2/auth/login?username=${QBITTORRENT_USERNAME}&password=${QBITTORRENT_PASSWORD}`
+    `${QBITTORRENT_URL}/api/v2/auth/login?username=${QBITTORRENT_USERNAME}&password=${QBITTORRENT_PASSWORD}`,
   );
   if (!response.ok) {
     throw new Error("Failed to login to qBittorrent");
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     if (!Array.isArray(magnetLinks) || !savePath) {
       return NextResponse.json(
         { error: "Invalid request data" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (!cookie) {
       return NextResponse.json(
         { error: "Failed to authenticate with qBittorrent" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       {
         error: error instanceof Error ? error.message : "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

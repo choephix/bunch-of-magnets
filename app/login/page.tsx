@@ -1,39 +1,39 @@
-'use client'
+"use client";
 
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { login, checkAuth } from '../services/authService'
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { login, checkAuth } from "../services/authService";
 
 function LoginForm() {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     // Check if already authenticated
     const verifyAuth = async () => {
-      const isAuthenticated = await checkAuth()
+      const isAuthenticated = await checkAuth();
       if (isAuthenticated) {
-        const from = searchParams.get('from') || '/'
-        router.push(from)
+        const from = searchParams.get("from") || "/";
+        router.push(from);
       }
-    }
-    verifyAuth()
-  }, [router, searchParams])
+    };
+    verifyAuth();
+  }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError("");
 
-    const result = await login(password)
+    const result = await login(password);
     if (result.success) {
-      const from = searchParams.get('from') || '/'
-      router.push(from)
+      const from = searchParams.get("from") || "/";
+      router.push(from);
     } else {
-      setError(result.error || 'Invalid password')
+      setError(result.error || "Invalid password");
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6 flex items-center justify-center">
@@ -78,17 +78,19 @@ function LoginForm() {
         </form>
       </div>
     </div>
-  )
+  );
 }
 
 export default function Login() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6 flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6 flex items-center justify-center">
+          <div className="text-gray-400">Loading...</div>
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
-  )
-} 
+  );
+}
