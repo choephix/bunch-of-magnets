@@ -13,15 +13,22 @@ export async function POST(request: Request) {
 
     console.log("🌐 Fetching URL:", url);
     const response = await fetch(url);
-    const html = await response.text();
+    
+    let magnetUrls: string[] = [];
 
-    let magnetUrls = extractMagnetUrls(html);
+    // Clone the response so we can try both JSON and text parsing
+    const responseClone = response.clone();
 
-    if (magnetUrls.length === 0) {
-      console.log(
-        "🔍 No direct magnet links found, performing deeper search...",
-      );
-      magnetUrls = await performDeeperSearch(url, html);
+    // Try to parse as JSON first
+    try {
+      const json = await response.json();
+      console.log("📦 Detected JSON response");
+      magnetUrls = await handleUserJsonUrl(json);
+    } catch (jsonError) {
+      // If JSON parsing fails, treat as HTML/text
+      console.log("📄 Treating response as HTML/text");
+      const html = await responseClone.text();
+      magnetUrls = await handleUserHtmlUrl(url, html);
     }
 
     const magnetLinks = parseMagnetLinks(magnetUrls.join("\n"));
@@ -56,9 +63,97 @@ function extractMagnetUrls(html: string): string[] {
 }
 
 /**
- * Performs a deeper search for magnet links by following torrent page links
+ * Recursively extracts magnet URLs from a JSON object
+ * @param obj - The JSON object to search
+ * @returns Array of magnet URLs found in the JSON
  */
-async function performDeeperSearch(
+function extractMagnetUrlsFromJson(obj: any): string[] {
+  const magnetUrls: string[] = [];
+  const magnetRegex = /magnet:\?xt=urn:btih:[^"]+/g;
+
+  function traverse(current: any) {
+    if (typeof current === "string") {
+      const matches = current.match(magnetRegex);
+      if (matches) {
+        magnetUrls.push(...matches);
+      }
+    } else if (Array.isArray(current)) {
+      current.forEach(traverse);
+    } else if (typeof current === "object" && current !== null) {
+      Object.values(current).forEach(traverse);
+    }
+  }
+
+  traverse(obj);
+  return [...new Set(magnetUrls)];
+}
+
+/**
+ * Recursively extracts HTTP(S) URLs from a JSON object
+ * @param obj - The JSON object to search
+ * @returns Array of HTTP(S) URLs found in the JSON
+ */
+function extractHttpUrlsFromJson(obj: any): string[] {
+  const httpUrls: string[] = [];
+  const httpRegex = /https?:\/\/[^\s"']+/g;
+
+  function traverse(current: any) {
+    if (typeof current === "string") {
+      const matches = current.match(httpRegex);
+      if (matches) {
+        httpUrls.push(...matches);
+      }
+    } else if (Array.isArray(current)) {
+      current.forEach(traverse);
+    } else if (typeof current === "object" && current !== null) {
+      Object.values(current).forEach(traverse);
+    }
+  }
+
+  traverse(obj);
+  return [...new Set(httpUrls)];
+}
+
+/**
+ * Handles a JSON response from the user's URL
+ * @param json - The JSON object to process
+ * @returns Array of magnet URLs found
+ */
+async function handleUserJsonUrl(json: any): Promise<string[]> {
+  console.log("📦 Processing JSON response");
+  let magnetUrls = extractMagnetUrlsFromJson(json);
+
+  if (magnetUrls.length === 0) {
+    console.log("🔍 No direct magnet links found in JSON, searching for HTTP URLs...");
+    const httpUrls = extractHttpUrlsFromJson(json);
+    console.log("🔗 Found HTTP URLs:", httpUrls.length);
+    magnetUrls = await extractMagnetLinksFromAllHtmlUrls(httpUrls);
+  }
+
+  return magnetUrls;
+}
+
+/**
+ * Handles an HTML response from the user's URL
+ * @param url - The original URL
+ * @param html - The HTML content
+ * @returns Array of magnet URLs found
+ */
+async function handleUserHtmlUrl(url: string, html: string): Promise<string[]> {
+  let magnetUrls = extractMagnetUrls(html);
+
+  if (magnetUrls.length === 0) {
+    console.log("🔍 No direct magnet links found, performing deeper search...");
+    magnetUrls = await performDeeperSearchOnHTML(url, html);
+  }
+
+  return magnetUrls;
+}
+
+/**
+ * Performs a deeper search on HTML content by following torrent page links
+ */
+async function performDeeperSearchOnHTML(
   originalUrl: string,
   html: string,
 ): Promise<string[]> {
@@ -70,12 +165,27 @@ async function performDeeperSearch(
   const hrefMatches = [...html.matchAll(hrefRegex)];
   const allUrls = hrefMatches.map((match) => match[1]);
 
+  return extractMagnetLinksFromAllHtmlUrls(allUrls, baseUrl, originalUrlObj.host);
+}
+
+/**
+ * Extracts magnet links from a list of HTML URLs
+ * @param urls - List of URLs to process
+ * @param baseUrl - Base URL for resolving relative URLs
+ * @param originalHost - Original host for filtering
+ * @returns Array of magnet URLs found
+ */
+async function extractMagnetLinksFromAllHtmlUrls(
+  urls: string[],
+  baseUrl?: string,
+  originalHost?: string,
+): Promise<string[]> {
   // Filter URLs by same host and torrent paths
-  const torrentUrls = allUrls
+  const torrentUrls = urls
     .map((href) => {
       try {
-        // Handle relative URLs
-        const absoluteUrl = new URL(href, baseUrl);
+        // Handle relative URLs if baseUrl is provided
+        const absoluteUrl = baseUrl ? new URL(href, baseUrl) : new URL(href);
         return absoluteUrl.toString();
       } catch {
         return null;
@@ -86,8 +196,9 @@ async function performDeeperSearch(
       try {
         const urlObj = new URL(url);
         return (
-          urlObj.host === originalUrlObj.host &&
-          TORRENT_PATHS.some((path) => urlObj.pathname.startsWith(path))
+          !originalHost || // If no originalHost provided, accept all URLs
+          (urlObj.host === originalHost &&
+            TORRENT_PATHS.some((path) => urlObj.pathname.startsWith(path)))
         );
       } catch {
         return false;
