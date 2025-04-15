@@ -131,16 +131,17 @@ export default function Home() {
 
     try {
       console.log("🚀 Starting to add torrents:", magnetLinks.length);
+      const selectedLinks = magnetLinks.filter((link) => !link.ignore);
       await addTorrents(
-        magnetLinks,
+        selectedLinks,
         savePath,
         "tvshow-anime",
-        magnetLinks.map((link) => link.displayName).filter(Boolean),
+        selectedLinks.map((link) => link.displayName).filter(Boolean),
       );
 
       setStatus({
         type: "success",
-        message: `Added ${magnetLinks.length} torrents`,
+        message: `Added ${selectedLinks.length} torrents`,
       });
 
       actions.clearMagnetLinks();
@@ -253,7 +254,8 @@ export default function Home() {
                     {magnetLinks.map((item, index) => (
                       <div
                         key={index}
-                        className="text-xs hover:bg-gray-800 rounded text-gray-200 transition-colors flex items-center group"
+                        className={`text-xs hover:bg-gray-800 rounded transition-colors flex items-center group cursor-pointer ${item.ignore ? 'opacity-40' : 'text-gray-200'}`}
+                        onClick={() => actions.toggleIgnoreMagnetLink(index)}
                       >
                         <div className="flex-1 min-w-0 flex items-center space-x-2 px-4">
                           <span
@@ -283,13 +285,38 @@ export default function Home() {
           </div>
 
           {magnetLinks.length > 0 && (
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-            >
-              {isLoading ? "Adding..." : `Add ${magnetLinks.length} Torrents`}
-            </button>
+            <>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => actions.sortMagnetLinksByName()}
+                  className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                >
+                  sort by name
+                </button>
+                <button
+                  type="button"
+                  onClick={() => actions.selectAllMagnetLinks()}
+                  className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                >
+                  select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => actions.selectNoneMagnetLinks()}
+                  className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                >
+                  select none
+                </button>
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+              >
+                {isLoading ? "Adding..." : `Add ${magnetLinks.filter(m => !m.ignore).length} Torrents`}
+              </button>
+            </>
           )}
         </form>
 

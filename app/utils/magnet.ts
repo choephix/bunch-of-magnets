@@ -1,6 +1,7 @@
 export type MagnetLink = {
   magnetUrl: string;
   displayName: string;
+  ignore: boolean;
 };
 
 export function debounce<T extends (...args: any[]) => any>(
@@ -29,7 +30,7 @@ export function parseMagnetLinks(text: string): MagnetLink[] {
         ? decodeURIComponent(nameMatch[1])
         : magnetUrl.slice(0, 50) + "...";
 
-      return { magnetUrl, displayName };
+      return { magnetUrl, displayName, ignore: false };
     });
 }
 

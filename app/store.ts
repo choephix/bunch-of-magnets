@@ -138,6 +138,27 @@ export const actions = {
   setSavePath: (path: string) => {
     store.savePath = path;
   },
+
+  toggleIgnoreMagnetLink: (index: number) => {
+    const link = store.magnetLinks[index];
+    if (link) {
+      link.ignore = !link.ignore;
+    }
+  },
+
+  sortMagnetLinksByName: () => {
+    store.magnetLinks.sort((a, b) => 
+      (a.displayName || a.magnetUrl).localeCompare(b.displayName || b.magnetUrl)
+    );
+  },
+
+  selectAllMagnetLinks: () => {
+    store.magnetLinks.forEach(link => link.ignore = false);
+  },
+
+  selectNoneMagnetLinks: () => {
+    store.magnetLinks.forEach(link => link.ignore = true);
+  },
 };
 
 export const useStore = () => useSnapshot(store);
