@@ -24,6 +24,12 @@ const initialState: State = {
 
 export const store = proxy<State>(initialState);
 
+// Helper to sort suggestions by type (library, then show, then season)
+const sortSuggestionsByType = () => {
+  const typeOrder = { library: 0, showname: 1, season: 2 };
+  store.suggestions.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+};
+
 // Helper to update suggestions based on current magnetLinks
 const updateSuggestionsFromMagnetLinks = async (
   magnetLinks: readonly MagnetLink[]
@@ -53,6 +59,9 @@ const updateSuggestionsFromMagnetLinks = async (
   } catch (error) {
     console.error("❌ Error parsing seasons:", error);
   }
+
+  // Sort suggestions by type
+  sortSuggestionsByType();
 };
 
 export const actions = {
