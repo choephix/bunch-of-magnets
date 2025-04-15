@@ -239,17 +239,18 @@ export default function Home() {
                 id="magnetInput"
                 value={magnetInput}
                 onChange={handleMagnetInput}
-                className="w-full h-16 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none p-4"
+                disabled={isExtracting}
+                className={`w-full h-16 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none p-4 ${isExtracting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 placeholder="Paste magnet link here (magnet:?xt=...) or a website url with magnet links."
               />
-              {isExtracting && (
-                <p className="px-2 text-xs text-blue-400">
-                  Extracting magnet links from URL...
-                </p>
-              )}
-              {magnetLinks.length > 0 && (
+              {(magnetLinks.length > 0 || isExtracting) && (
                 <>
                   <div className="h-px bg-gray-700" />
+                  {isExtracting && (
+                    <p className="px-4 py-2 text-xs text-blue-400">
+                      🔍 Extracting magnet links from URL...
+                    </p>
+                  )}
                   <div className="space-y-1">
                     {magnetLinks.map((item, index) => (
                       <div
