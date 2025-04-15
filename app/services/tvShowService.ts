@@ -25,7 +25,7 @@ export async function parseTvShowName(displayName: string): Promise<string> {
 }
 
 export async function parseFirstTvShowName(
-  magnetLinks: MagnetLink[],
+  magnetLinks: readonly MagnetLink[],
 ): Promise<string | null> {
   if (magnetLinks[0]?.displayName) {
     try {
@@ -40,7 +40,7 @@ export async function parseFirstTvShowName(
   return null;
 }
 
-export function parseSeasons(magnetLinks: MagnetLink[]): number[] {
+export function parseSeasons(magnetLinks: readonly MagnetLink[]): number[] {
   const seasons = new Set<number>();
 
   magnetLinks.forEach((link) => {

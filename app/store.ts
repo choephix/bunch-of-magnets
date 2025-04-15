@@ -24,52 +24,48 @@ const initialState: State = {
 
 export const store = proxy<State>(initialState);
 
-// Subscribe to magnetLinks changes to update suggestions
-subscribe(store.magnetLinks, async () => {
-  if (store.magnetLinks.length > 0) {
-    // Parse show name from first link
-    try {
-      const showName = await parseFirstTvShowName(store.magnetLinks);
-      if (showName) {
-        const newSuggestion = { type: "showname" as const, value: showName };
-        if (
-          !store.suggestions.some(
-            (s) => s.type === "showname" && s.value === showName,
-          )
-        ) {
-          store.suggestions.push(newSuggestion);
-        }
+// Helper to update suggestions based on current magnetLinks
+const updateSuggestionsFromMagnetLinks = async (
+  magnetLinks: readonly MagnetLink[]
+) => {
+  // Parse show name from first link
+  try {
+    const showName = await parseFirstTvShowName(magnetLinks);
+    if (showName) {
+      const newSuggestion = { type: "showname" as const, value: showName };
+      if (!store.suggestions.some(s => s.type === "showname" && s.value === showName)) {
+        store.suggestions.push(newSuggestion);
       }
-    } catch (error) {
-      console.error("❌ Error parsing show name:", error);
     }
-
-    // Parse seasons from all links
-    try {
-      const seasons = parseSeasons(store.magnetLinks);
-      seasons.forEach((season) => {
-        const newSuggestion = { type: "season" as const, value: season };
-        if (
-          !store.suggestions.some(
-            (s) => s.type === "season" && s.value === season,
-          )
-        ) {
-          store.suggestions.push(newSuggestion);
-        }
-      });
-    } catch (error) {
-      console.error("❌ Error parsing seasons:", error);
-    }
+  } catch (error) {
+    console.error("❌ Error parsing show name:", error);
   }
-});
+
+  // Parse seasons from all links
+  try {
+    const seasons = parseSeasons(magnetLinks);
+    seasons.forEach(season => {
+      const newSuggestion = { type: "season" as const, value: season };
+      if (!store.suggestions.some(s => s.type === "season" && s.value === season)) {
+        store.suggestions.push(newSuggestion);
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error parsing seasons:", error);
+  }
+};
 
 export const actions = {
-  addMagnetLinks: (links: readonly MagnetLink[]) => {
+  addMagnetLinks: async (links: readonly MagnetLink[]) => {
     const existingUrls = new Set(
       store.magnetLinks.map((link) => link.magnetUrl),
     );
     const newLinks = links.filter((link) => !existingUrls.has(link.magnetUrl));
     store.magnetLinks.push(...newLinks);
+
+    if (newLinks.length > 0) {
+      await updateSuggestionsFromMagnetLinks(links);
+    }
   },
 
   removeMagnetLink: (index: number) => {
