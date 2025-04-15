@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useEffect } from "react";
 import { MagnetLink, debounce, parseMagnetLinks, parseTags } from "./utils/magnet";
-import { parseFirstTvShowName } from "./services/tvShowService";
+import { parseFirstTvShowName, parseSeasons } from "./services/tvShowService";
 import { addTorrents } from "./services/qbittorrentService";
 import { fetchConfig } from "./services/configService";
 import { logout } from "./services/authService";
@@ -13,6 +13,11 @@ type TorrentStatus = {
   status: "pending" | "adding" | "success" | "error";
   error?: string;
   tags?: string[];
+};
+
+type SuggestionPill = {
+  type: "showname" | "season" | "library";
+  value: string | number;
 };
 
 export default function Home() {
@@ -27,6 +32,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [qbittorrentUrl, setQbittorrentUrl] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestionPill[]>([
+    { type: "library", value: "Live Action Series" },
+    { type: "library", value: "Anime Series" }
+  ]);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -50,8 +59,39 @@ export default function Home() {
     setMagnetLinks((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleShowNameParsed = (showName: string) => {
+    setSuggestions(prev => {
+      const newSuggestion = { type: "showname" as const, value: showName };
+      // Check for duplicates
+      if (prev.some(s => s.type === "showname" && s.value === showName)) return prev;
+      return [...prev, newSuggestion];
+    });
+  };
+
+  const handleSeasonsParsed = (seasons: number[]) => {
+    setSuggestions(prev => {
+      const newSuggestions = seasons.map(season => ({
+        type: "season" as const,
+        value: season
+      }));
+      // Filter out existing season suggestions
+      const existingSeasons = new Set(prev.filter(s => s.type === "season").map(s => s.value));
+      const uniqueNewSuggestions = newSuggestions.filter(s => !existingSeasons.has(s.value));
+      return [...prev, ...uniqueNewSuggestions];
+    });
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      console.log('📋 Copied to clipboard:', text);
+    } catch (err) {
+      console.error('❌ Failed to copy:', err);
+    }
+  };
+
   const updateMagnetLinks = useCallback(
-    debounce((text: string) => {
+    debounce(async (text: string) => {
       const parsed = parseMagnetLinks(text);
       console.log("🔍 Parsed new magnet links:", parsed.length);
 
@@ -66,7 +106,14 @@ export default function Home() {
       if (newLinks.length > 0) {
         console.log("✨ Adding new unique links:", newLinks.length);
         setMagnetLinks((prev) => [...prev, ...newLinks]);
-        parseFirstTvShowName(newLinks);
+        const showName = await parseFirstTvShowName(newLinks);
+        if (showName) {
+          handleShowNameParsed(showName);
+        }
+        const seasons = parseSeasons(newLinks);
+        if (seasons.length > 0) {
+          handleSeasonsParsed(seasons);
+        }
       } else {
         console.log("⚠️ No new unique links found");
       }
@@ -217,6 +264,34 @@ export default function Home() {
     }
   };
 
+  const applySuggestion = (suggestion: SuggestionPill) => {
+    const parts = savePath.split('/').filter(Boolean);
+    const minParts = 5; // /storage/Library/<library>/<showname>/<season>
+
+    // Ensure we have at least the minimum parts
+    while (parts.length < minParts) {
+      if (parts.length === 0) parts.push('storage');
+      else if (parts.length === 1) parts.push('Library');
+      else if (parts.length === 2) parts.push('Temp');
+      else if (parts.length === 3) parts.push('Unknown');
+      else if (parts.length === 4) parts.push('Season 1');
+    }
+
+    // Update the relevant part based on suggestion type
+    if (suggestion.type === "library") {
+      parts[2] = suggestion.value as string;
+    } else if (suggestion.type === "showname") {
+      parts[3] = suggestion.value as string;
+    } else if (suggestion.type === "season") {
+      parts[4] = `Season ${suggestion.value}`;
+    }
+
+    // Reconstruct the path
+    const newPath = `/${parts.join('/')}/`;
+    setSavePath(newPath);
+    console.log('📁 Updated save path:', newPath);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6">
       <main className="max-w-2xl mx-auto">
@@ -233,7 +308,7 @@ export default function Home() {
 
         <form
           onSubmit={handleSubmit}
-          className="space-y-4 bg-gray-800 p-4 rounded-xl shadow-xl border border-gray-700"
+          className="space-y-6 bg-gray-800 p-4 rounded-xl shadow-xl border border-gray-700"
         >
           <div>
             <label
@@ -252,6 +327,40 @@ export default function Home() {
               required
             />
           </div>
+
+          {suggestions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    applySuggestion(suggestion);
+                    copyToClipboard(
+                      suggestion.type === "season" 
+                        ? `Season ${suggestion.value}`
+                        : suggestion.value as string
+                    );
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs transition-colors flex items-center gap-2 ${
+                    suggestion.type === "season"
+                      ? "bg-purple-900/50 text-purple-200 hover:bg-purple-800/50"
+                      : suggestion.type === "library"
+                      ? "bg-green-900/50 text-green-200 hover:bg-green-800/50"
+                      : "bg-blue-900/50 text-blue-200 hover:bg-blue-800/50"
+                  }`}
+                >
+                  <span>
+                    {suggestion.type === "season"
+                      ? `Season ${suggestion.value}`
+                      : suggestion.value}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div>
             <label
