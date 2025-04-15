@@ -215,7 +215,7 @@ export default function Home() {
             </div>
           )}
 
-          <div>
+          <div className='mb-1'>
             <label htmlFor='magnetInput' className='block text-xs font-medium mb-1 text-gray-300'>
               Magnet Links
             </label>
@@ -274,25 +274,25 @@ export default function Home() {
           {magnetLinks.length > 0 && (
             <>
               {magnetLinks.length > 1 && (
-                <div className='flex gap-2 justify-end'>
+                <div className='flex gap-2 justify-end -mt-1 mb-1'>
                   <button
                     type='button'
                     onClick={() => actions.sortMagnetLinksByName()}
-                    className='text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors'
+                    className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     sort by name
                   </button>
                   <button
                     type='button'
                     onClick={() => actions.selectAllMagnetLinks()}
-                    className='text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors'
+                    className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     select all
                   </button>
                   <button
                     type='button'
                     onClick={() => actions.selectNoneMagnetLinks()}
-                    className='text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors'
+                    className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     select none
                   </button>
@@ -305,7 +305,10 @@ export default function Home() {
             <button
               type='submit'
               disabled={isLoading}
-              className='w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900'
+              className='w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 
+              disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none 
+              cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900
+              mt-4'
             >
               {isLoading
                 ? 'Adding...'
