@@ -3,7 +3,7 @@ import { MagnetLink } from './utils/magnet';
 import { parseFirstTvShowName, parseSeasons } from './services/tvShowService';
 
 type SuggestionPill = {
-  type: "showname" | "season" | "library";
+  type: 'showname' | 'season' | 'library';
   value: string | number;
 };
 
@@ -16,10 +16,10 @@ type State = {
 const initialState: State = {
   magnetLinks: [],
   suggestions: [
-    { type: "library", value: "Live Action Series" },
-    { type: "library", value: "Anime Series" }
+    { type: 'library', value: 'Live Action Series' },
+    { type: 'library', value: 'Anime Series' },
   ],
-  savePath: "/storage/Library/Temp/"
+  savePath: '/storage/Library/Temp/',
 };
 
 export const store = proxy<State>(initialState);
@@ -28,22 +28,30 @@ export const store = proxy<State>(initialState);
 subscribe(store.magnetLinks, async () => {
   if (store.magnetLinks.length > 0) {
     // Parse show name from first link
-    const showName = await parseFirstTvShowName(store.magnetLinks);
-    if (showName) {
-      const newSuggestion = { type: "showname" as const, value: showName };
-      if (!store.suggestions.some(s => s.type === "showname" && s.value === showName)) {
-        store.suggestions.push(newSuggestion);
+    try {
+      const showName = await parseFirstTvShowName(store.magnetLinks);
+      if (showName) {
+        const newSuggestion = { type: 'showname' as const, value: showName };
+        if (!store.suggestions.some(s => s.type === 'showname' && s.value === showName)) {
+          store.suggestions.push(newSuggestion);
+        }
       }
+    } catch (error) {
+      console.error('❌ Error parsing show name:', error);
     }
 
     // Parse seasons from all links
-    const seasons = parseSeasons(store.magnetLinks);
-    seasons.forEach(season => {
-      const newSuggestion = { type: "season" as const, value: season };
-      if (!store.suggestions.some(s => s.type === "season" && s.value === season)) {
-        store.suggestions.push(newSuggestion);
-      }
-    });
+    try {
+      const seasons = parseSeasons(store.magnetLinks);
+      seasons.forEach(season => {
+        const newSuggestion = { type: 'season' as const, value: season };
+        if (!store.suggestions.some(s => s.type === 'season' && s.value === season)) {
+          store.suggestions.push(newSuggestion);
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error parsing seasons:', error);
+    }
   }
 });
 
@@ -70,7 +78,9 @@ export const actions = {
 
   addSuggestions: (suggestions: SuggestionPill[]) => {
     suggestions.forEach(suggestion => {
-      if (!store.suggestions.some(s => s.type === suggestion.type && s.value === suggestion.value)) {
+      if (
+        !store.suggestions.some(s => s.type === suggestion.type && s.value === suggestion.value)
+      ) {
         store.suggestions.push(suggestion);
       }
     });
@@ -78,9 +88,14 @@ export const actions = {
 
   applySuggestion: (suggestion: SuggestionPill) => {
     const parts = store.savePath.split('/').filter(Boolean);
-    const targetIndex = suggestion.type === "library" ? 2 :
-                       suggestion.type === "showname" ? 3 :
-                       suggestion.type === "season" ? 4 : -1;
+    const targetIndex =
+      suggestion.type === 'library'
+        ? 2
+        : suggestion.type === 'showname'
+        ? 3
+        : suggestion.type === 'season'
+        ? 4
+        : -1;
 
     if (targetIndex === -1) return;
 
@@ -94,9 +109,8 @@ export const actions = {
     }
 
     // Update the target part
-    parts[targetIndex] = suggestion.type === "season" 
-      ? `Season ${suggestion.value}`
-      : suggestion.value as string;
+    parts[targetIndex] =
+      suggestion.type === 'season' ? `Season ${suggestion.value}` : (suggestion.value as string);
 
     // Reconstruct the path
     store.savePath = `/${parts.join('/')}/`;
@@ -105,7 +119,7 @@ export const actions = {
 
   setSavePath: (path: string) => {
     store.savePath = path;
-  }
+  },
 };
 
-export const useStore = () => useSnapshot(store); 
+export const useStore = () => useSnapshot(store);
