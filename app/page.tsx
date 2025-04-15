@@ -167,6 +167,16 @@ export default function Home() {
       if (newLinks.length > 0) {
         console.log("✨ Adding new unique links from URL:", newLinks.length);
         setMagnetLinks((prev) => [...prev, ...newLinks]);
+        
+        // Parse show name and seasons for the new links
+        const showName = await parseFirstTvShowName(newLinks);
+        if (showName) {
+          handleShowNameParsed(showName);
+        }
+        const seasons = parseSeasons(newLinks);
+        if (seasons.length > 0) {
+          handleSeasonsParsed(seasons);
+        }
       } else {
         console.log("⚠️ No new unique links found in URL");
       }
