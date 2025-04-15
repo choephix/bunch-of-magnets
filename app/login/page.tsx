@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { login, checkAuth } from '../services/authService'
 
 function LoginForm() {
   const [password, setPassword] = useState('')
@@ -11,38 +12,26 @@ function LoginForm() {
 
   useEffect(() => {
     // Check if already authenticated
-    const checkAuth = async () => {
-      const response = await fetch('/api/auth/check')
-      if (response.ok) {
+    const verifyAuth = async () => {
+      const isAuthenticated = await checkAuth()
+      if (isAuthenticated) {
         const from = searchParams.get('from') || '/'
         router.push(from)
       }
     }
-    checkAuth()
+    verifyAuth()
   }, [router, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Invalid password')
-      }
-
+    const result = await login(password)
+    if (result.success) {
       const from = searchParams.get('from') || '/'
       router.push(from)
-    } catch (err) {
-      setError('Invalid password')
-      console.error('🔒 Login error:', err)
+    } else {
+      setError(result.error || 'Invalid password')
     }
   }
 

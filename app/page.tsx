@@ -2,6 +2,10 @@
 
 import { useCallback, useState, useEffect } from "react";
 import { MagnetLink, debounce, parseMagnetLinks, parseTags } from "./utils/magnet";
+import { parseFirstTvShowName } from "./services/tvShowService";
+import { addTorrents } from "./services/qbittorrentService";
+import { fetchConfig } from "./services/configService";
+import { logout } from "./services/authService";
 
 type TorrentStatus = {
   magnetUrl: string;
@@ -25,41 +29,21 @@ export default function Home() {
   const [qbittorrentUrl, setQbittorrentUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchConfig = async () => {
+    const loadConfig = async () => {
       try {
-        console.log('⚙️ Fetching configuration...');
-        const response = await fetch('/api/config');
-        const data = await response.json();
-        if (response.ok) {
-          setQbittorrentUrl(data.qbittorrentUrl);
-        } else {
-          console.error('❌ Failed to fetch configuration:', data.error);
-        }
+        const config = await fetchConfig();
+        setQbittorrentUrl(config.qbittorrentUrl);
       } catch (error) {
-        console.error('❌ Error fetching configuration:', error);
+        console.error('❌ Failed to fetch configuration:', error);
       }
     };
 
-    fetchConfig();
+    loadConfig();
   }, []);
 
   const handleLogout = async () => {
-    try {
-      console.log('🔒 Logging out...')
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-      })
-      
-      if (response.ok) {
-        window.location.href = '/login'
-      } else {
-        console.error('❌ Logout failed')
-      }
-    } catch (error) {
-      console.error('❌ Logout error:', error)
-      window.location.href = '/login'
-    }
-  }
+    await logout();
+  };
 
   const removeMagnetLink = (index: number) => {
     console.log(`🗑️ Removing magnet link at index ${index}`);
@@ -82,33 +66,14 @@ export default function Home() {
       if (newLinks.length > 0) {
         console.log("✨ Adding new unique links:", newLinks.length);
         setMagnetLinks((prev) => [...prev, ...newLinks]);
-        
-        // Parse the first torrent name
-        if (newLinks[0]?.displayName) {
-          fetch('/api/parse-tv-shows', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              filenames: [newLinks[0].displayName]
-            })
-          })
-          .then(response => response.json())
-          .then(data => {
-            console.log('📺 Parsed TV show name:', data.showNames[0]);
-          })
-          .catch(error => {
-            console.error('❌ Error parsing TV show name:', error);
-          });
-        }
+        parseFirstTvShowName(newLinks);
       } else {
         console.log("⚠️ No new unique links found");
       }
 
       setMagnetInput("");
     }, 150),
-    [magnetLinks] // Add magnetLinks as a dependency
+    [magnetLinks]
   );
 
   const isUrl = (text: string) => {
@@ -211,26 +176,15 @@ export default function Home() {
         initialStatuses.map((status) => ({ ...status, status: "adding" }))
       );
 
-      const response = await fetch("/api/qbittorrent", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          magnetLinks: magnetLinks.map((link) => link.magnetUrl),
-          savePath,
-          category: 'tvshow-anime',
-          tags: initialStatuses.map(status => status.tags).filter(Boolean).flat(),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.results?.[0]?.success) {
-        throw new Error(data.results?.[0]?.error || data.error || "Failed to add torrents");
-      }
-
-      console.log("✅ Added all torrents successfully");
+      await addTorrents(
+        magnetLinks,
+        savePath,
+        'tvshow-anime',
+        initialStatuses
+          .map(status => status.tags)
+          .filter((tags): tags is string[] => tags !== undefined)
+          .flat()
+      );
 
       // Update all statuses to "success"
       setTorrentStatuses(
