@@ -5,15 +5,6 @@ import { getAllSuggestionsSnapshot } from '../stores/appStateStore';
 export const SuggestionPills = () => {
   const suggestions = getAllSuggestionsSnapshot();
 
-  const copyToClipboard = useCallback(async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      console.log('📋 Copied to clipboard:', text);
-    } catch (err) {
-      console.error('❌ Failed to copy:', err);
-    }
-  }, []);
-
   if (suggestions.length === 0) return null;
 
   return (
@@ -26,11 +17,6 @@ export const SuggestionPills = () => {
             e.preventDefault();
             e.stopPropagation();
             appStateActions.applySuggestion(suggestion);
-            copyToClipboard(
-              suggestion.type === 'season'
-                ? `Season ${suggestion.value}`
-                : (suggestion.value as string)
-            );
           }}
           className={`px-3 py-1 rounded-full text-xs transition-colors flex items-center gap-2 ${
             suggestion.type === 'season'

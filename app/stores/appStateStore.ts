@@ -68,7 +68,7 @@ export const appStateActions = {
       appStateStore.magnetLinks.map((link) => link.magnetUrl),
     );
     const newLinks = links.filter((link) => !existingUrls.has(link.magnetUrl));
-    appStateStore.magnetLinks.push(...newLinks);
+    appStateStore.magnetLinks.unshift(...newLinks);
 
     if (newLinks.length > 0) {
       await updateSuggestionsFromMagnetLinks(links);
@@ -89,7 +89,7 @@ export const appStateActions = {
         (s) => s.type === suggestion.type && s.value === suggestion.value,
       )
     ) {
-      appStateStore.dynamicSuggestions.push(suggestion);
+      appStateStore.dynamicSuggestions.unshift(suggestion);
     }
   },
 
@@ -100,7 +100,7 @@ export const appStateActions = {
           (s) => s.type === suggestion.type && s.value === suggestion.value,
         )
       ) {
-        appStateStore.dynamicSuggestions.push(suggestion);
+        appStateStore.dynamicSuggestions.unshift(suggestion);
       }
     });
   },
