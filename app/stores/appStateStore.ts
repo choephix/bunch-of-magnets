@@ -1,6 +1,7 @@
 import { proxy, subscribe, useSnapshot } from "valtio";
-import { MagnetLink } from "./utils/magnet";
-import { parseFirstTvShowName, parseSeasons } from "./services/tvShowService";
+import { MagnetLink } from "../utils/magnet";
+import { parseFirstTvShowName, parseSeasons } from "../services/tvShowService";
+import { settingsStore } from "./settingsStore";
 
 type SuggestionPill = {
   type: "showname" | "season" | "library";
@@ -9,26 +10,22 @@ type SuggestionPill = {
 
 type State = {
   magnetLinks: MagnetLink[];
-  suggestions: SuggestionPill[];
+  dynamicSuggestions: SuggestionPill[];
   savePath: string;
 };
 
 const initialState: State = {
   magnetLinks: [],
-  suggestions: [
-    { type: "library", value: "Live Action Series" },
-    { type: "library", value: "Anime Series" },
-    { type: "library", value: "Documentaries" },
-  ],
+  dynamicSuggestions: [],
   savePath: "/storage/Library/_/",
 };
 
-export const store = proxy<State>(initialState);
+export const appStateStore = proxy<State>(initialState);
 
 // Helper to sort suggestions by type (library, then show, then season)
 const sortSuggestionsByType = () => {
   const typeOrder = { library: 0, showname: 1, season: 2 };
-  store.suggestions.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+  appStateStore.dynamicSuggestions.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
 };
 
 // Helper to update suggestions based on current magnetLinks
@@ -40,8 +37,8 @@ const updateSuggestionsFromMagnetLinks = async (
     const showName = await parseFirstTvShowName(magnetLinks);
     if (showName) {
       const newSuggestion = { type: "showname" as const, value: showName };
-      if (!store.suggestions.some(s => s.type === "showname" && s.value === showName)) {
-        store.suggestions.push(newSuggestion);
+      if (!appStateStore.dynamicSuggestions.some(s => s.type === "showname" && s.value === showName)) {
+        appStateStore.dynamicSuggestions.push(newSuggestion);
       }
     }
   } catch (error) {
@@ -53,8 +50,8 @@ const updateSuggestionsFromMagnetLinks = async (
     const seasons = parseSeasons(magnetLinks);
     seasons.forEach(season => {
       const newSuggestion = { type: "season" as const, value: season };
-      if (!store.suggestions.some(s => s.type === "season" && s.value === season)) {
-        store.suggestions.push(newSuggestion);
+      if (!appStateStore.dynamicSuggestions.some(s => s.type === "season" && s.value === season)) {
+        appStateStore.dynamicSuggestions.push(newSuggestion);
       }
     });
   } catch (error) {
@@ -65,13 +62,13 @@ const updateSuggestionsFromMagnetLinks = async (
   sortSuggestionsByType();
 };
 
-export const actions = {
+export const appStateActions = {
   addMagnetLinks: async (links: readonly MagnetLink[]) => {
     const existingUrls = new Set(
-      store.magnetLinks.map((link) => link.magnetUrl),
+      appStateStore.magnetLinks.map((link) => link.magnetUrl),
     );
     const newLinks = links.filter((link) => !existingUrls.has(link.magnetUrl));
-    store.magnetLinks.push(...newLinks);
+    appStateStore.magnetLinks.push(...newLinks);
 
     if (newLinks.length > 0) {
       await updateSuggestionsFromMagnetLinks(links);
@@ -79,37 +76,37 @@ export const actions = {
   },
 
   removeMagnetLink: (index: number) => {
-    store.magnetLinks.splice(index, 1);
+    appStateStore.magnetLinks.splice(index, 1);
   },
 
   clearMagnetLinks: () => {
-    store.magnetLinks = [];
+    appStateStore.magnetLinks = [];
   },
 
   addSuggestion: (suggestion: SuggestionPill) => {
     if (
-      !store.suggestions.some(
+      !appStateStore.dynamicSuggestions.some(
         (s) => s.type === suggestion.type && s.value === suggestion.value,
       )
     ) {
-      store.suggestions.push(suggestion);
+      appStateStore.dynamicSuggestions.push(suggestion);
     }
   },
 
   addSuggestions: (suggestions: SuggestionPill[]) => {
     suggestions.forEach((suggestion) => {
       if (
-        !store.suggestions.some(
+        !appStateStore.dynamicSuggestions.some(
           (s) => s.type === suggestion.type && s.value === suggestion.value,
         )
       ) {
-        store.suggestions.push(suggestion);
+        appStateStore.dynamicSuggestions.push(suggestion);
       }
     });
   },
 
   applySuggestion: (suggestion: SuggestionPill) => {
-    const parts = store.savePath.split("/").filter(Boolean);
+    const parts = appStateStore.savePath.split("/").filter(Boolean);
     const targetIndex =
       suggestion.type === "library"
         ? 2
@@ -137,34 +134,45 @@ export const actions = {
         : (suggestion.value as string);
 
     // Reconstruct the path
-    store.savePath = `/${parts.join("/")}/`;
-    console.log("📁 Updated save path:", store.savePath);
+    appStateStore.savePath = `/${parts.join("/")}/`;
+    console.log("📁 Updated save path:", appStateStore.savePath);
   },
 
   setSavePath: (path: string) => {
-    store.savePath = path;
+    appStateStore.savePath = path;
   },
 
   toggleIgnoreMagnetLink: (index: number) => {
-    const link = store.magnetLinks[index];
+    const link = appStateStore.magnetLinks[index];
     if (link) {
       link.ignore = !link.ignore;
     }
   },
 
   sortMagnetLinksByName: () => {
-    store.magnetLinks.sort((a, b) => 
+    appStateStore.magnetLinks.sort((a, b) => 
       (a.displayName || a.magnetUrl).localeCompare(b.displayName || b.magnetUrl)
     );
   },
 
   selectAllMagnetLinks: () => {
-    store.magnetLinks.forEach(link => link.ignore = false);
+    appStateStore.magnetLinks.forEach(link => link.ignore = false);
   },
 
   selectNoneMagnetLinks: () => {
-    store.magnetLinks.forEach(link => link.ignore = true);
+    appStateStore.magnetLinks.forEach(link => link.ignore = true);
   },
 };
 
-export const useStore = () => useSnapshot(store);
+export const useAppState = () => useSnapshot(appStateStore);
+
+export const getAllSuggestionsSnapshot = () => {
+  const appState = useSnapshot(appStateStore);
+  const settings = useSnapshot(settingsStore);
+  
+  const librarySuggestions = Object.entries(settings.librarySuggestions)
+    .filter(([_, enabled]) => enabled)
+    .map(([type]) => ({ type: "library" as const, value: type }));
+  
+  return [...librarySuggestions, ...appState.dynamicSuggestions];
+}; 

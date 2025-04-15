@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { LogOut, Settings } from 'lucide-react';
 import { logout } from './services/authService';
 import { fetchConfig } from './services/configService';
 import { addTorrents } from './services/qbittorrentService';
-import { actions, useStore } from './store';
+import { appStateActions, useAppState } from './stores/appStateStore';
 import { MagnetLink, debounce, parseMagnetLinks } from './utils/magnet';
 import { MagnetExtractionLoader } from './components/MagnetExtractionLoader';
+import { SettingsModal } from './components/SettingsModal';
+import { SuggestionPills } from './components/SuggestionPills';
 
 export default function Home() {
   const [magnetInput, setMagnetInput] = useState('');
@@ -17,8 +20,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [qbittorrentUrl, setQbittorrentUrl] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const { magnetLinks, suggestions, savePath } = useStore();
+  const { magnetLinks, savePath } = useAppState();
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -39,23 +43,14 @@ export default function Home() {
 
   const removeMagnetLink = (index: number) => {
     console.log(`🗑️ Removing magnet link at index ${index}`);
-    actions.removeMagnetLink(index);
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      console.log('📋 Copied to clipboard:', text);
-    } catch (err) {
-      console.error('❌ Failed to copy:', err);
-    }
+    appStateActions.removeMagnetLink(index);
   };
 
   const updateMagnetLinks = useCallback(
     debounce((text: string) => {
       const parsed = parseMagnetLinks(text);
       console.log('🔍 Parsed new magnet links:', parsed.length);
-      actions.addMagnetLinks(parsed);
+      appStateActions.addMagnetLinks(parsed);
       setMagnetInput('');
     }, 150),
     []
@@ -94,7 +89,7 @@ export default function Home() {
 
       // Create a mutable copy of the magnet links
       const mutableLinks = [...data.magnetLinks];
-      actions.addMagnetLinks(mutableLinks);
+      appStateActions.addMagnetLinks(mutableLinks);
     } catch (error) {
       console.error('❌ Error extracting magnets from URL:', error);
       setStatus({
@@ -139,7 +134,7 @@ export default function Home() {
         message: `Added ${selectedLinks.length} torrents`,
       });
 
-      actions.clearMagnetLinks();
+      appStateActions.clearMagnetLinks();
     } catch (error) {
       console.error('❌ Error:', error);
       setStatus({
@@ -158,12 +153,27 @@ export default function Home() {
           Bunch of Magnets
         </h1>
 
-        <button
-          onClick={handleLogout}
-          className='absolute top-4 right-4 text-sm text-gray-400 hover:text-red-400 transition-colors'
-        >
-          Logout
-        </button>
+        <div className='absolute top-4 right-4 flex gap-2'>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className='text-gray-400 hover:text-blue-400 transition-colors'
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
+          <button
+            onClick={handleLogout}
+            className='text-gray-400 hover:text-red-400 transition-colors'
+            title="Logout"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+
+        <SettingsModal 
+          isOpen={isSettingsOpen} 
+          onClose={() => setIsSettingsOpen(false)} 
+        />
 
         <form
           onSubmit={handleSubmit}
@@ -177,44 +187,14 @@ export default function Home() {
               type='text'
               id='savePath'
               value={savePath}
-              onChange={e => actions.setSavePath(e.target.value)}
+              onChange={e => appStateActions.setSavePath(e.target.value)}
               className='w-full p-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all'
               placeholder='/path/to/save/directory'
               required
             />
           </div>
 
-          {suggestions.length > 0 && (
-            <div className='flex flex-wrap gap-2'>
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  type='button'
-                  onClick={e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    actions.applySuggestion(suggestion);
-                    copyToClipboard(
-                      suggestion.type === 'season'
-                        ? `Season ${suggestion.value}`
-                        : (suggestion.value as string)
-                    );
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs transition-colors flex items-center gap-2 ${
-                    suggestion.type === 'season'
-                      ? 'bg-purple-900/50 text-purple-200 hover:bg-purple-800/50'
-                      : suggestion.type === 'library'
-                      ? 'bg-green-900/50 text-green-200 hover:bg-green-800/50'
-                      : 'bg-blue-900/50 text-blue-200 hover:bg-blue-800/50'
-                  }`}
-                >
-                  <span>
-                    {suggestion.type === 'season' ? `Season ${suggestion.value}` : suggestion.value}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+          <SuggestionPills />
 
           <div className='mb-1'>
             <label htmlFor='magnetInput' className='block text-xs font-medium mb-1 text-gray-300'>
@@ -244,7 +224,7 @@ export default function Home() {
                         className={`text-xs hover:bg-gray-800 rounded transition-colors flex items-center group cursor-pointer ${
                           item.ignore ? 'opacity-40' : 'text-gray-200'
                         }`}
-                        onClick={() => actions.toggleIgnoreMagnetLink(index)}
+                        onClick={() => appStateActions.toggleIgnoreMagnetLink(index)}
                       >
                         <div className='flex-1 min-w-0 flex items-center space-x-2 px-4'>
                           <span className='truncate' title={item.displayName || item.magnetUrl}>
@@ -276,21 +256,21 @@ export default function Home() {
                 <div className='flex gap-2 justify-end -mt-1 mb-1'>
                   <button
                     type='button'
-                    onClick={() => actions.sortMagnetLinksByName()}
+                    onClick={() => appStateActions.sortMagnetLinksByName()}
                     className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     sort by name
                   </button>
                   <button
                     type='button'
-                    onClick={() => actions.selectAllMagnetLinks()}
+                    onClick={() => appStateActions.selectAllMagnetLinks()}
                     className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     select all
                   </button>
                   <button
                     type='button'
-                    onClick={() => actions.selectNoneMagnetLinks()}
+                    onClick={() => appStateActions.selectNoneMagnetLinks()}
                     className='text-xs px-2 py-0.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors'
                   >
                     select none
