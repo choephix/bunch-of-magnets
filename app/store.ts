@@ -18,6 +18,7 @@ const initialState: State = {
   suggestions: [
     { type: "library", value: "Live Action Series" },
     { type: "library", value: "Anime Series" },
+    { type: "library", value: "Documentaries" },
   ],
   savePath: "/storage/Library/_/",
 };
