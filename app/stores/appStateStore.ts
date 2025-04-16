@@ -1,6 +1,6 @@
-import { proxy, subscribe, useSnapshot } from "valtio";
-import { MagnetLink } from "../utils/magnet";
+import { proxy, useSnapshot } from "valtio";
 import { parseFirstTvShowName, parseSeasons } from "../services/tvShowService";
+import { MagnetLink } from "../utils/magnet";
 import { settingsStore } from "./settingsStore";
 
 type SuggestionPill = {
@@ -81,6 +81,7 @@ export const appStateActions = {
 
   clearMagnetLinks: () => {
     appStateStore.magnetLinks = [];
+    appStateStore.dynamicSuggestions = [];
   },
 
   addSuggestion: (suggestion: SuggestionPill) => {
