@@ -8,8 +8,10 @@ import { SaveDir } from './components/SaveDir';
 import { SettingsModal } from './components/SettingsModal';
 import { StatusMessage } from './components/StatusMessage';
 import { SuggestionPills } from './components/SuggestionPills';
-import { useAppState } from './stores/appStateStore';
 import { useMagnetSubmission } from './hooks/useMagnetSubmission';
+import { fetchConfig } from './services/configService';
+import { useAppState } from './stores/appStateStore';
+import { useProcessMagnetLinkQueries } from './hooks/useMagnetQuery';
 import { configActions } from './stores/configStore';
 
 export default function Home() {
@@ -17,9 +19,9 @@ export default function Home() {
   const { magnetLinks, savePath } = useAppState();
   const { isLoading, status, submitMagnetLinks } = useMagnetSubmission();
 
-  useEffect(() => {
-    configActions.load();
-  }, []);
+  useLoadConfig();
+
+  useUrlMagnetQuery();
 
   return (
     <div className='min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6'>
@@ -48,3 +50,34 @@ export default function Home() {
     </div>
   );
 }
+
+const useLoadConfig = () => {
+  useEffect(() => {
+    configActions.load();
+  }, []);
+}
+
+const useUrlMagnetQuery = () => {
+  const { processMagnetLinkQueries } = useProcessMagnetLinkQueries();
+
+  useEffect(() => {
+    const handleUrlQuery = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const query = searchParams.get('q');
+
+      if (query) {
+        console.log('🔍 Found magnet query in URL:', query);
+        
+        // Remove the query parameter from the URL
+        searchParams.delete('q');
+        const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+
+        // Process the query
+        await processMagnetLinkQueries([query]);
+      }
+    };
+
+    handleUrlQuery();
+  }, [processMagnetLinkQueries]);
+};

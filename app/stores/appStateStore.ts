@@ -12,12 +12,14 @@ type State = {
   magnetLinks: MagnetLink[];
   dynamicSuggestions: SuggestionPill[];
   savePath: string;
+  isExtracting: boolean;
 };
 
 const initialState: State = {
   magnetLinks: [],
   dynamicSuggestions: [],
   savePath: "/storage/Library/_/",
+  isExtracting: false,
 };
 
 export const appStateStore = proxy<State>(initialState);
@@ -162,6 +164,10 @@ export const appStateActions = {
 
   selectNoneMagnetLinks: () => {
     appStateStore.magnetLinks.forEach(link => link.ignore = true);
+  },
+
+  setIsExtracting: (isExtracting: boolean) => {
+    appStateStore.isExtracting = isExtracting;
   },
 };
 

@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react";
-import { MagnetLink, debounce, parseMagnetLinks } from "../utils/magnet";
+import { useSnapshot } from "valtio";
+import { useProcessMagnetLinkQueries } from "../hooks/useMagnetQuery";
 import { appStateActions, useAppState } from "../stores/appStateStore";
-import { MagnetExtractionLoader } from "./MagnetExtractionLoader";
 import {
   queryHistoryActions,
   queryHistoryStore,
 } from "../stores/queryHistoryStore";
-import { useSnapshot } from "valtio";
+import { debounce } from "../utils/magnet";
+import { MagnetExtractionLoader } from "./MagnetExtractionLoader";
 
 interface MagnetLinksProps {
   onSubmit: (e: React.FormEvent) => Promise<void>;
@@ -15,77 +16,25 @@ interface MagnetLinksProps {
 
 export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
   const [magnetInput, setMagnetInput] = useState("");
-  const [isExtracting, setIsExtracting] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const { magnetLinks } = useAppState();
+  const { magnetLinks, isExtracting } = useAppState();
+
+  const { error, processMagnetLinkQueries } = useProcessMagnetLinkQueries();
 
   const removeMagnetLink = (index: number) => {
     console.log(`🗑️ Removing magnet link at index ${index}`);
     appStateActions.removeMagnetLink(index);
   };
 
-  const isUrl = (text: string) => {
-    if (text.startsWith("magnet:?")) {
-      return false;
-    }
-
-    try {
-      new URL(text);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const extractMagnetsFromUrl = async (url: string) => {
-    setIsExtracting(true);
-    try {
-      console.log("🔗 Extracting magnets from URL:", url);
-      const response = await fetch("/api/extract-magnets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
-      });
-
-      const data: { magnetLinks: MagnetLink[]; error?: string } =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to extract magnet links");
-      }
-
-      // Create a mutable copy of the magnet links
-      const mutableLinks = [...data.magnetLinks];
-      appStateActions.addMagnetLinks(mutableLinks);
-
-      // Save URL as candidate query
-      queryHistoryActions.setCandidateQuery(url);
-    } catch (error) {
-      console.error("❌ Error extracting magnets from URL:", error);
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
   const handleMagnetInput = async (text: string) => {
     setMagnetInput(text);
-
-    if (isUrl(text)) {
-      await extractMagnetsFromUrl(text);
-      setMagnetInput("");
-      return;
-    }
-
-    updateMagnetLinks(text);
+    processMagnetLinks(text);
   };
 
-  const updateMagnetLinks = useCallback(
-    debounce((text: string) => {
-      const parsed = parseMagnetLinks(text);
-      console.log("🔍 Parsed new magnet links:", parsed.length);
-      appStateActions.addMagnetLinks(parsed);
+  const processMagnetLinks = useCallback(
+    debounce(async (text: string) => {
+      const lines = text.split("\n");
+      await processMagnetLinkQueries(lines);
       setMagnetInput("");
     }, 150),
     []
