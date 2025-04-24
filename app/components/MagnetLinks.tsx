@@ -1,14 +1,10 @@
 import { useCallback, useState } from "react";
-import { useSnapshot } from "valtio";
 import { useProcessMagnetLinkQueries } from "../hooks/useMagnetQuery";
 import { appStateActions, useAppState } from "../stores/appStateStore";
-import {
-  queryHistoryActions,
-  queryHistoryStore,
-} from "../stores/queryHistoryStore";
+import { queryHistoryActions } from "../stores/queryHistoryStore";
 import { debounce } from "../utils/magnet";
-import { MagnetExtractionLoader } from "./MagnetExtractionLoader";
 import { HistoryModal } from "./HistoryModal";
+import { MagnetExtractionLoader } from "./MagnetExtractionLoader";
 
 interface MagnetLinksProps {
   onSubmit: (e: React.FormEvent) => Promise<void>;
