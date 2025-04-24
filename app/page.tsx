@@ -8,27 +8,17 @@ import { SaveDir } from './components/SaveDir';
 import { SettingsModal } from './components/SettingsModal';
 import { StatusMessage } from './components/StatusMessage';
 import { SuggestionPills } from './components/SuggestionPills';
-import { fetchConfig } from './services/configService';
 import { useAppState } from './stores/appStateStore';
 import { useMagnetSubmission } from './hooks/useMagnetSubmission';
+import { configActions } from './stores/configStore';
 
 export default function Home() {
-  const [qbittorrentUrl, setQbittorrentUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { magnetLinks, savePath } = useAppState();
   const { isLoading, status, submitMagnetLinks } = useMagnetSubmission();
 
   useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const config = await fetchConfig();
-        setQbittorrentUrl(config.qbittorrentUrl);
-      } catch (error) {
-        console.error('❌ Failed to fetch configuration:', error);
-      }
-    };
-
-    loadConfig();
+    configActions.load();
   }, []);
 
   return (
@@ -53,7 +43,7 @@ export default function Home() {
 
         <StatusMessage status={status} />
         
-        <QbittorrentLink url={qbittorrentUrl} />
+        <QbittorrentLink />
       </main>
     </div>
   );
