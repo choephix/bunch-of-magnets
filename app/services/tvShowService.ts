@@ -24,12 +24,21 @@ export async function parseTvShowName(displayName: string): Promise<string> {
   }
 }
 
+const isValidMagnetDisplayName = (displayName: string | undefined): boolean => {
+  return !!displayName && !displayName.includes("magnet:?");
+};
+
 export async function parseFirstTvShowName(
   magnetLinks: readonly MagnetLink[],
 ): Promise<string | null> {
-  if (magnetLinks[0]?.displayName) {
+  for (const link of magnetLinks) {
+    const isValid = isValidMagnetDisplayName(link.displayName);
+    if (!isValid) {
+      continue;
+    }
+
     try {
-      const showName = await parseTvShowName(magnetLinks[0].displayName);
+      const showName = await parseTvShowName(link.displayName);
       console.log("📺 Parsed TV show name:", showName);
       return showName;
     } catch (error) {
@@ -37,6 +46,7 @@ export async function parseFirstTvShowName(
       return null;
     }
   }
+  
   return null;
 }
 
