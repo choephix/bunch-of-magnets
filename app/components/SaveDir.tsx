@@ -1,10 +1,14 @@
-import { ChangeEvent, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import { appStateActions, useAppState } from '../stores/appStateStore';
 
 export const SaveDir = () => {
   const { savePath } = useAppState();
   const [inputValue, setInputValue] = useState(savePath);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setInputValue(savePath);
+  }, [savePath]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
