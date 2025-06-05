@@ -34,12 +34,14 @@ A web application for bulk-adding magnet links to qBittorrent. Live at [bunch-of
    ```bash
    npm install
    ```
-3. Create a `.env` file with your qBittorrent configuration:
+3. Create a `.env` file with your qBittorrent and Supabase configuration:
    ```
    QBITTORRENT_URL=your-qbittorrent-webui-url
    QBITTORRENT_USERNAME=your-username
    QBITTORRENT_PASSWORD=your-password
    APP_PASSWORD=desired-login-password
+   SUPABASE_URL=your-supabase-url
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
    ```
 
 ### Development

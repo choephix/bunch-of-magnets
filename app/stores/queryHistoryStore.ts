@@ -16,7 +16,7 @@ const initialState: QueryHistoryState = {
 
 export const queryHistoryStore = proxy<QueryHistoryState>(initialState);
 
-// Load history from Upstash
+// Load history from Supabase
 const loadHistory = async () => {
   try {
     queryHistoryStore.isLoading = true;
@@ -31,7 +31,7 @@ const loadHistory = async () => {
   }
 };
 
-// Save history to Upstash
+// Save history to Supabase
 const saveHistory = async (history: string[]) => {
   try {
     const response = await fetch('/api/query-history', {
@@ -72,7 +72,7 @@ export const queryHistoryActions = {
       queryHistoryStore.history = queryHistoryStore.history.slice(0, MAX_HISTORY_ITEMS);
     }
     
-    // Save to Upstash
+    // Save to Supabase
     await saveHistory(queryHistoryStore.history);
     
     // Clear candidate
