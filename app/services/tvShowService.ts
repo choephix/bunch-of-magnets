@@ -43,7 +43,8 @@ export async function parseFirstTvShowName(
       return showName;
     } catch (error) {
       console.error("❌ Error parsing TV show name:", error);
-      return null;
+      // Continue with the next magnet link if parsing fails
+      continue;
     }
   }
   
