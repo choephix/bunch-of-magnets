@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseMagnetLinks } from "@/app/utils/magnet";
+import { chromium, Browser } from "playwright";
 
 const TORRENT_PATHS = ["/torrent", "/download"]; // Add more paths as needed
 
@@ -12,24 +13,29 @@ export async function POST(request: Request) {
     }
 
     console.log("🌐 Fetching URL:", url);
-    const response = await fetch(url);
-    
+
+    const browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+
     let magnetUrls: string[] = [];
 
-    // Clone the response so we can try both JSON and text parsing
-    const responseClone = response.clone();
-
-    // Try to parse as JSON first
+    const bodyText = await page.evaluate(() => document.body.innerText);
     try {
-      const json = await response.json();
+      const json = JSON.parse(bodyText);
       console.log("📦 Detected JSON response");
-      magnetUrls = await handleUserJsonUrl(json);
-    } catch (jsonError) {
-      // If JSON parsing fails, treat as HTML/text
+      magnetUrls = await handleUserJsonUrl(json, browser);
+    } catch {
       console.log("📄 Treating response as HTML/text");
-      const html = await responseClone.text();
-      magnetUrls = await handleUserHtmlUrl(url, html);
+      const html = await page.content();
+      magnetUrls = await handleUserHtmlUrl(url, html, browser);
     }
+
+    await page.close();
+    await browser.close();
 
     const magnetLinks = parseMagnetLinks(magnetUrls.join("\n"));
     console.log("🔍 Found magnet links:", magnetLinks.length);
@@ -119,15 +125,20 @@ function extractHttpUrlsFromJson(obj: any): string[] {
  * @param json - The JSON object to process
  * @returns Array of magnet URLs found
  */
-async function handleUserJsonUrl(json: any): Promise<string[]> {
+async function handleUserJsonUrl(
+  json: any,
+  browser: Browser,
+): Promise<string[]> {
   console.log("📦 Processing JSON response");
   let magnetUrls = extractMagnetUrlsFromJson(json);
 
   if (magnetUrls.length === 0) {
-    console.log("🔍 No direct magnet links found in JSON, searching for HTTP URLs...");
+    console.log(
+      "🔍 No direct magnet links found in JSON, searching for HTTP URLs...",
+    );
     const httpUrls = extractHttpUrlsFromJson(json);
     console.log("🔗 Found HTTP URLs:", httpUrls.length);
-    magnetUrls = await extractMagnetLinksFromAllHtmlUrls(httpUrls);
+    magnetUrls = await extractMagnetLinksFromAllHtmlUrls(httpUrls, browser);
   }
 
   return magnetUrls;
@@ -139,12 +150,16 @@ async function handleUserJsonUrl(json: any): Promise<string[]> {
  * @param html - The HTML content
  * @returns Array of magnet URLs found
  */
-async function handleUserHtmlUrl(url: string, html: string): Promise<string[]> {
+async function handleUserHtmlUrl(
+  url: string,
+  html: string,
+  browser: Browser,
+): Promise<string[]> {
   let magnetUrls = extractMagnetUrls(html);
 
   if (magnetUrls.length === 0) {
     console.log("🔍 No direct magnet links found, performing deeper search...");
-    magnetUrls = await performDeeperSearchOnHTML(url, html);
+    magnetUrls = await performDeeperSearchOnHTML(url, html, browser);
   }
 
   return magnetUrls;
@@ -156,6 +171,7 @@ async function handleUserHtmlUrl(url: string, html: string): Promise<string[]> {
 async function performDeeperSearchOnHTML(
   originalUrl: string,
   html: string,
+  browser: Browser,
 ): Promise<string[]> {
   const originalUrlObj = new URL(originalUrl);
   const baseUrl = `${originalUrlObj.protocol}//${originalUrlObj.host}`;
@@ -165,7 +181,12 @@ async function performDeeperSearchOnHTML(
   const hrefMatches = [...html.matchAll(hrefRegex)];
   const allUrls = hrefMatches.map((match) => match[1]);
 
-  return extractMagnetLinksFromAllHtmlUrls(allUrls, baseUrl, originalUrlObj.host);
+  return extractMagnetLinksFromAllHtmlUrls(
+    allUrls,
+    browser,
+    baseUrl,
+    originalUrlObj.host,
+  );
 }
 
 /**
@@ -177,6 +198,7 @@ async function performDeeperSearchOnHTML(
  */
 async function extractMagnetLinksFromAllHtmlUrls(
   urls: string[],
+  browser: Browser,
   baseUrl?: string,
   originalHost?: string,
 ): Promise<string[]> {
@@ -207,25 +229,30 @@ async function extractMagnetLinksFromAllHtmlUrls(
 
   console.log("🔗 Found potential torrent pages:", torrentUrls.length);
 
-  // Fetch all torrent pages in parallel
+  const context = await browser.newContext();
+
   const magnetPromises = torrentUrls.map(async (url) => {
+    const page = await context.newPage();
     try {
       console.log("📥 Fetching torrent page:", url);
-      const response = await fetch(url);
-      const pageHtml = await response.text();
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+      const pageHtml = await page.content();
       const magnets = extractMagnetUrls(pageHtml);
 
       if (magnets.length > 1) {
         console.warn("⚠️ Multiple magnet links found on page:", magnets);
       }
 
-      return magnets[0]; // Take first magnet link if any
+      return magnets[0];
     } catch (error) {
       console.error("❌ Error fetching torrent page:", url, error);
       return null;
+    } finally {
+      await page.close();
     }
   });
 
   const results = await Promise.all(magnetPromises);
+  await context.close();
   return results.filter((magnet): magnet is string => magnet !== null);
 }
