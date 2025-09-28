@@ -52,3 +52,75 @@ export function parseTags(displayName: string): string[] {
   console.log("🏷️ Parsed tags for", displayName, ":", tags);
   return tags;
 }
+
+export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const torrentData = new Uint8Array(arrayBuffer);
+        
+        // Import bencode dynamically to avoid SSR issues
+        const bencode = await import('bencode');
+        
+        // Parse torrent file using bencode library
+        const torrent = bencode.decode(torrentData);
+        
+        if (!torrent || !torrent.info) {
+          reject(new Error("Invalid torrent file"));
+          return;
+        }
+        
+        // Generate magnet link from torrent data
+        const magnetLink = await generateMagnetFromTorrent(torrent);
+        
+        // Extract display name from torrent
+        const displayName = torrent.info.name?.toString() || file.name.replace('.torrent', '');
+        
+        resolve([{
+          magnetUrl: magnetLink,
+          displayName: displayName,
+          ignore: false
+        }]);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    
+    reader.onerror = () => {
+      reject(new Error("Failed to read torrent file"));
+    };
+    
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+
+async function generateMagnetFromTorrent(torrent: any): Promise<string> {
+  // Import bencode dynamically to avoid SSR issues
+  const bencode = await import('bencode');
+  
+  // Calculate the info hash by encoding the info dictionary
+  const infoEncoded = bencode.encode(torrent.info);
+  const infoHash = await calculateSHA1(infoEncoded);
+  
+  const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
+  
+  // Add trackers if available
+  if (torrent.announce) {
+    const announce = Array.isArray(torrent.announce) ? torrent.announce[0] : torrent.announce;
+    if (announce) {
+      return `${magnetLink}&tr=${encodeURIComponent(announce.toString())}`;
+    }
+  }
+  
+  return magnetLink;
+}
+
+async function calculateSHA1(data: Uint8Array): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
