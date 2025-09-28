@@ -8,7 +8,7 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number,
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
+  let timeout: ReturnType<typeof setTimeout>;
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       clearTimeout(timeout);
@@ -51,4 +51,104 @@ export function parseTags(displayName: string): string[] {
 
   console.log("🏷️ Parsed tags for", displayName, ":", tags);
   return tags;
+}
+
+export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const torrentData = new Uint8Array(arrayBuffer);
+        
+        // Import bencode dynamically to avoid SSR issues
+        const bencodeModule = await import('bencode');
+        const bencode = bencodeModule.default;
+        
+        // Parse torrent file using bencode library
+        const torrent = bencode.decode(torrentData);
+        
+        if (!torrent || !torrent.info) {
+          reject(new Error("Invalid torrent file"));
+          return;
+        }
+        
+        // Prefer UTF-8 name when available, fall back to raw name or filename
+        const info = torrent.info ?? {};
+        const rawName = (info["name.utf-8"] ?? info.name) as unknown;
+        const displayName =
+          typeof rawName === "string"
+            ? rawName
+            : rawName instanceof Uint8Array
+              ? new TextDecoder().decode(rawName)
+              : rawName?.toString() ??
+                file.name.replace(/\.torrent$/i, '');
+        
+        // Generate magnet link from torrent data
+        const magnetLink = await generateMagnetFromTorrent(torrent);
+        
+        resolve([{
+          magnetUrl: magnetLink,
+          displayName: displayName,
+          ignore: false
+        }]);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    
+    reader.onerror = () => {
+      reject(new Error("Failed to read torrent file"));
+    };
+    
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+
+async function generateMagnetFromTorrent(torrent: any): Promise<string> {
+  // Import bencode dynamically to avoid SSR issues
+  const bencodeModule = await import('bencode');
+  const bencode = bencodeModule.default;
+  
+  // Calculate the info hash by encoding the info dictionary
+  const infoEncoded = bencode.encode(torrent.info);
+  const infoHash = await calculateSHA1(infoEncoded);
+  
+  const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
+  
+  // Collect all tracker URLs from announce-list and fall back to announce
+  const trackers: unknown[] = [];
+
+  if (Array.isArray(torrent['announce-list'])) {
+    for (const tier of torrent['announce-list'] as unknown[]) {
+      if (Array.isArray(tier)) {
+        trackers.push(...tier);
+      } else if (tier) {
+        trackers.push(tier);
+      }
+    }
+  } else if (torrent.announce) {
+    trackers.push(torrent.announce);
+  }
+
+  const trackerParams = trackers
+    .map((tracker) => {
+      if (tracker instanceof Uint8Array) {
+        return new TextDecoder().decode(tracker);
+      }
+      return tracker?.toString();
+    })
+    .filter(Boolean)
+    .map((url) => `&tr=${encodeURIComponent(url!)}`)
+    .join('');
+
+  return `${magnetLink}${trackerParams}`;
+}
+
+async function calculateSHA1(data: Uint8Array): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
