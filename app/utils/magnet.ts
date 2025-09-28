@@ -8,7 +8,7 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number,
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
+  let timeout: ReturnType<typeof setTimeout>;
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       clearTimeout(timeout);
@@ -63,7 +63,8 @@ export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
         const torrentData = new Uint8Array(arrayBuffer);
         
         // Import bencode dynamically to avoid SSR issues
-        const bencode = await import('bencode');
+        const bencodeModule = await import('bencode');
+        const bencode = bencodeModule.default;
         
         // Parse torrent file using bencode library
         const torrent = bencode.decode(torrentData);
@@ -100,7 +101,8 @@ export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
 
 async function generateMagnetFromTorrent(torrent: any): Promise<string> {
   // Import bencode dynamically to avoid SSR issues
-  const bencode = await import('bencode');
+  const bencodeModule = await import('bencode');
+  const bencode = bencodeModule.default;
   
   // Calculate the info hash by encoding the info dictionary
   const infoEncoded = bencode.encode(torrent.info);
