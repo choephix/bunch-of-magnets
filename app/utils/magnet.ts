@@ -69,32 +69,19 @@ export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
         // Parse torrent file using bencode library
         const torrent = bencode.decode(torrentData);
         
-        console.log("🔍 Raw torrent data:", torrent);
-        console.log("🔍 Torrent info:", torrent.info);
-        console.log("🔍 Torrent announce:", torrent.announce);
-        console.log("🔍 Torrent announce-list:", torrent['announce-list']);
-        
         if (!torrent || !torrent.info) {
           reject(new Error("Invalid torrent file"));
           return;
         }
         
-        // Log all info fields
-        console.log("🔍 Info fields:", Object.keys(torrent.info));
-        console.log("🔍 Info name type:", typeof torrent.info.name);
-        console.log("🔍 Info name value:", torrent.info.name);
-        
         // Convert Uint8Array to string if needed
         let displayName: string;
         if (torrent.info.name instanceof Uint8Array) {
           displayName = new TextDecoder().decode(torrent.info.name);
-          console.log("🔍 Converted name from Uint8Array:", displayName);
         } else if (typeof torrent.info.name === 'string') {
           displayName = torrent.info.name;
-          console.log("🔍 Name is already string:", displayName);
         } else {
           displayName = file.name.replace('.torrent', '');
-          console.log("🔍 Using filename as fallback:", displayName);
         }
         
         // Generate magnet link from torrent data
@@ -124,31 +111,21 @@ async function generateMagnetFromTorrent(torrent: any): Promise<string> {
   const bencodeModule = await import('bencode');
   const bencode = bencodeModule.default;
   
-  console.log("🔍 Generating magnet link from torrent info:", torrent.info);
-  
   // Calculate the info hash by encoding the info dictionary
   const infoEncoded = bencode.encode(torrent.info);
-  console.log("🔍 Encoded info:", infoEncoded);
-  
   const infoHash = await calculateSHA1(infoEncoded);
-  console.log("🔍 Calculated info hash:", infoHash);
   
   const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
-  console.log("🔍 Base magnet link:", magnetLink);
   
   // Add trackers if available
   if (torrent.announce) {
     const announce = Array.isArray(torrent.announce) ? torrent.announce[0] : torrent.announce;
-    console.log("🔍 Announce tracker:", announce);
     if (announce) {
       const trackerUrl = announce instanceof Uint8Array ? new TextDecoder().decode(announce) : announce.toString();
-      const finalMagnetLink = `${magnetLink}&tr=${encodeURIComponent(trackerUrl)}`;
-      console.log("🔍 Final magnet link with tracker:", finalMagnetLink);
-      return finalMagnetLink;
+      return `${magnetLink}&tr=${encodeURIComponent(trackerUrl)}`;
     }
   }
   
-  console.log("🔍 Final magnet link without tracker:", magnetLink);
   return magnetLink;
 }
 

@@ -78,7 +78,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
       for (const file of torrentFiles) {
         console.log("📁 Processing torrent file:", file.name);
         const magnetLinks = await parseTorrentFile(file);
-        appStateActions.addMagnetLinks(magnetLinks);
+        await appStateActions.addMagnetLinks(magnetLinks);
       }
     } catch (error) {
       console.error("❌ Error processing torrent files:", error);
