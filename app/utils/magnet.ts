@@ -74,15 +74,16 @@ export async function parseTorrentFile(file: File): Promise<MagnetLink[]> {
           return;
         }
         
-        // Convert Uint8Array to string if needed
-        let displayName: string;
-        if (torrent.info.name instanceof Uint8Array) {
-          displayName = new TextDecoder().decode(torrent.info.name);
-        } else if (typeof torrent.info.name === 'string') {
-          displayName = torrent.info.name;
-        } else {
-          displayName = file.name.replace('.torrent', '');
-        }
+        // Prefer UTF-8 name when available, fall back to raw name or filename
+        const info = torrent.info ?? {};
+        const rawName = (info["name.utf-8"] ?? info.name) as unknown;
+        const displayName =
+          typeof rawName === "string"
+            ? rawName
+            : rawName instanceof Uint8Array
+              ? new TextDecoder().decode(rawName)
+              : rawName?.toString() ??
+                file.name.replace(/\.torrent$/i, '');
         
         // Generate magnet link from torrent data
         const magnetLink = await generateMagnetFromTorrent(torrent);
@@ -117,16 +118,33 @@ async function generateMagnetFromTorrent(torrent: any): Promise<string> {
   
   const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
   
-  // Add trackers if available
-  if (torrent.announce) {
-    const announce = Array.isArray(torrent.announce) ? torrent.announce[0] : torrent.announce;
-    if (announce) {
-      const trackerUrl = announce instanceof Uint8Array ? new TextDecoder().decode(announce) : announce.toString();
-      return `${magnetLink}&tr=${encodeURIComponent(trackerUrl)}`;
+  // Collect all tracker URLs from announce-list and fall back to announce
+  const trackers: unknown[] = [];
+
+  if (Array.isArray(torrent['announce-list'])) {
+    for (const tier of torrent['announce-list'] as unknown[]) {
+      if (Array.isArray(tier)) {
+        trackers.push(...tier);
+      } else if (tier) {
+        trackers.push(tier);
+      }
     }
+  } else if (torrent.announce) {
+    trackers.push(torrent.announce);
   }
-  
-  return magnetLink;
+
+  const trackerParams = trackers
+    .map((tracker) => {
+      if (tracker instanceof Uint8Array) {
+        return new TextDecoder().decode(tracker);
+      }
+      return tracker?.toString();
+    })
+    .filter(Boolean)
+    .map((url) => `&tr=${encodeURIComponent(url!)}`)
+    .join('');
+
+  return `${magnetLink}${trackerParams}`;
 }
 
 async function calculateSHA1(data: Uint8Array): Promise<string> {
