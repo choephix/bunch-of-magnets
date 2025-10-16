@@ -122,7 +122,10 @@ export async function POST(req: Request) {
       5. Keep only the main show name
       6. Return the show name in a clean, standardized format
       7. Overall use your intuition to determine the correct show name
-      8. Replace colons etc with dashes, to ensure valid folder name for the show`,
+      8. Replace colons etc with dashes, to ensure valid folder name for the show
+      
+      Small note: Sometimes it may be a movie. That's fine. Just return the name.
+      `,
       messages: [
         ...exampleMessages,
         {
