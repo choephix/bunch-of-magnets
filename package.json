@@ -19,7 +19,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "valtio": "^2.1.4",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "playwright": "^1.45.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
