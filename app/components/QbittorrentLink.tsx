@@ -1,8 +1,10 @@
 import { useSnapshot } from 'valtio';
 import { configStore, getActiveDownloader } from '../stores/configStore';
+import { settingsStore } from '../stores/settingsStore';
 
 export const QbittorrentLink = () => {
-  useSnapshot(configStore); // subscribe to changes
+  useSnapshot(configStore);
+  useSnapshot(settingsStore); // getActiveDownloader depends on selectedDownloader
   const activeDownloader = getActiveDownloader();
 
   if (!activeDownloader) return null;
