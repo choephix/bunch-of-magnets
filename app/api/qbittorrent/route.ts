@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
+import { getDownloaderByName, getDefaultDownloader } from "@/app/lib/appConfig";
 
-const QBITTORRENT_URL = process.env.QBITTORRENT_URL;
-const QBITTORRENT_USERNAME = process.env.QBITTORRENT_USERNAME;
-const QBITTORRENT_PASSWORD = process.env.QBITTORRENT_PASSWORD;
-
-if (!QBITTORRENT_URL || !QBITTORRENT_USERNAME || !QBITTORRENT_PASSWORD) {
-  throw new Error("Missing required qBittorrent environment variables");
-}
-
-async function login() {
+async function loginToQbittorrent(url: string, username: string, password: string) {
   const response = await fetch(
-    `${QBITTORRENT_URL}/api/v2/auth/login?username=${QBITTORRENT_USERNAME}&password=${QBITTORRENT_PASSWORD}`,
+    `${url}/api/v2/auth/login?username=${username}&password=${password}`,
   );
   if (!response.ok) {
     throw new Error("Failed to login to qBittorrent");
@@ -20,7 +13,7 @@ async function login() {
 
 export async function POST(request: Request) {
   try {
-    const { magnetLinks, savePath, category, tags } = await request.json();
+    const { magnetLinks, savePath, category, tags, downloaderName } = await request.json();
 
     if (!Array.isArray(magnetLinks) || !savePath) {
       return NextResponse.json(
@@ -29,7 +22,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const cookie = await login();
+    const downloader = downloaderName 
+      ? getDownloaderByName(downloaderName) 
+      : getDefaultDownloader();
+
+    if (downloader.type === 'transmission') {
+      return NextResponse.json(
+        { error: "Transmission support not implemented yet" },
+        { status: 501 },
+      );
+    }
+
+    const cookie = await loginToQbittorrent(downloader.url, downloader.username, downloader.password);
     if (!cookie) {
       return NextResponse.json(
         { error: "Failed to authenticate with qBittorrent" },
@@ -42,6 +46,7 @@ export async function POST(request: Request) {
     console.log("📁 Using save path:", savePath);
     console.log("🏷️ Using category:", category);
     console.log("🏷️ Using tags:", tags);
+    console.log("🖥️ Using downloader:", downloader.name);
 
     const headers = {
       Cookie: cookie,
@@ -58,7 +63,7 @@ export async function POST(request: Request) {
     const body = new URLSearchParams(bodyDict);
     console.log("🔍 Body:", body.toString());
 
-    const response = await fetch(`${QBITTORRENT_URL}/api/v2/torrents/add`, {
+    const response = await fetch(`${downloader.url}/api/v2/torrents/add`, {
       method: "POST",
       headers: headers,
       body: body,

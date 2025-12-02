@@ -11,8 +11,8 @@ interface SettingsModalProps {
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const { librarySuggestions, qbittorrentUrlOverride } = useSnapshot(settingsStore);
-  const { defaultQbittorrentUrl } = useSnapshot(configStore);
+  const { librarySuggestions, selectedDownloader } = useSnapshot(settingsStore);
+  const { downloaders } = useSnapshot(configStore);
 
   const handleClickOutside = useCallback(
     (event: MouseEvent) => {
@@ -34,6 +34,8 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   if (!isOpen) return null;
 
+  const effectiveSelection = selectedDownloader ?? downloaders[0]?.name ?? null;
+
   return (
     <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50'>
       <div ref={modalRef} className='bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 relative'>
@@ -47,18 +49,38 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
         <div className='space-y-6'>
           <div>
-            <h3 className='text-sm font-medium text-gray-300 mb-2'>qBittorrent URL</h3>
-            <input
-              type='url'
-              value={qbittorrentUrlOverride ?? ''}
-              onChange={e => settingsActions.setQbittorrentUrlOverride(e.target.value)}
-              placeholder={defaultQbittorrentUrl ?? 'http://localhost:8080'}
-              className='w-full px-3 py-2 bg-gray-700/50 rounded-lg text-gray-200 placeholder-gray-500 
-                         border border-gray-600 focus:border-blue-500 focus:outline-none transition-colors'
-            />
-            <p className='text-xs text-gray-500 mt-1'>
-              Override the default URL for opening qBittorrent Web UI
-            </p>
+            <h3 className='text-sm font-medium text-gray-300 mb-2'>Downloader</h3>
+            {downloaders.length > 0 ? (
+              <div className='space-y-2'>
+                {downloaders.map(downloader => (
+                  <button
+                    key={downloader.name}
+                    onClick={() => settingsActions.setSelectedDownloader(downloader.name)}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                      effectiveSelection === downloader.name
+                        ? 'bg-blue-900/50 text-blue-200 border border-blue-500'
+                        : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-transparent'
+                    }`}
+                  >
+                    <div className='flex flex-col items-start'>
+                      <span className='font-medium'>{downloader.name}</span>
+                      <span className='text-xs text-gray-500'>{downloader.url}</span>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        downloader.type === 'qbittorrent'
+                          ? 'bg-green-900/50 text-green-300'
+                          : 'bg-orange-900/50 text-orange-300'
+                      }`}
+                    >
+                      {downloader.type}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className='text-sm text-gray-500'>No downloaders configured</p>
+            )}
           </div>
 
           <div>

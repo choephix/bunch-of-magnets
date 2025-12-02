@@ -1,24 +1,21 @@
 import { useSnapshot } from 'valtio';
-import { configStore } from '../stores/configStore';
-import { settingsStore } from '../stores/settingsStore';
+import { configStore, getActiveDownloader } from '../stores/configStore';
 
 export const QbittorrentLink = () => {
-  const { defaultQbittorrentUrl } = useSnapshot(configStore);
-  const { qbittorrentUrlOverride } = useSnapshot(settingsStore);
+  useSnapshot(configStore); // subscribe to changes
+  const activeDownloader = getActiveDownloader();
 
-  const qbittorrentUrl = qbittorrentUrlOverride || defaultQbittorrentUrl;
-
-  if (!qbittorrentUrl) return null;
+  if (!activeDownloader) return null;
 
   return (
     <div className='mt-4 text-center'>
       <a
-        href={qbittorrentUrl}
+        href={activeDownloader.url}
         target='_blank'
         rel='noopener noreferrer'
         className='text-xs text-gray-400 hover:text-blue-400 transition-colors'
       >
-        Open qBittorrent Web UI →
+        Open {activeDownloader.name} →
       </a>
     </div>
   );

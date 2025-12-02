@@ -1,5 +1,13 @@
+export type DownloaderType = 'qbittorrent' | 'transmission';
+
+export interface PublicDownloader {
+  name: string;
+  url: string;
+  type: DownloaderType;
+}
+
 export interface Config {
-  qbittorrentUrl: string;
+  downloaders: PublicDownloader[];
 }
 
 export async function fetchConfig(): Promise<Config> {

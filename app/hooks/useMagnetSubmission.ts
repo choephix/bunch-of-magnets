@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MagnetLink } from '../utils/magnet';
 import { addTorrents } from '../services/qbittorrentService';
 import { appStateActions } from '../stores/appStateStore';
+import { getActiveDownloader } from '../stores/configStore';
 
 interface UseMagnetSubmissionResult {
   isLoading: boolean;
@@ -20,11 +21,14 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
     try {
       console.log('🚀 Starting to add torrents:', magnetLinks.length);
       const selectedLinks = magnetLinks.filter(link => !link.ignore);
+      const activeDownloader = getActiveDownloader();
+      
       await addTorrents(
         selectedLinks,
         savePath,
         'tvshow-anime',
-        selectedLinks.map(link => link.displayName).filter(Boolean)
+        selectedLinks.map(link => link.displayName).filter(Boolean),
+        activeDownloader?.name
       );
 
       setStatus({

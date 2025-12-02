@@ -1,30 +1,39 @@
 import { proxy } from 'valtio';
-import { fetchConfig } from '../services/configService';
+import { fetchConfig, PublicDownloader } from '../services/configService';
 import { settingsStore } from './settingsStore';
 
 interface ConfigState {
-  defaultQbittorrentUrl: string | null;
+  downloaders: PublicDownloader[];
   isLoading: boolean;
 }
 
 const initialState: ConfigState = {
-  defaultQbittorrentUrl: null,
+  downloaders: [],
   isLoading: true,
 };
 
 export const configStore = proxy<ConfigState>(initialState);
 
-// Computed getter for effective URL (override takes precedence)
-export const getQbittorrentUrl = () =>
-  settingsStore.qbittorrentUrlOverride || configStore.defaultQbittorrentUrl;
+/** Get the active downloader (selected or first available) */
+export const getActiveDownloader = (): PublicDownloader | null => {
+  const { downloaders } = configStore;
+  if (!downloaders.length) return null;
+
+  const selected = settingsStore.selectedDownloader;
+  if (selected) {
+    const found = downloaders.find(d => d.name === selected);
+    if (found) return found;
+  }
+  return downloaders[0];
+};
 
 export const configActions = {
   load: async () => {
     try {
       configStore.isLoading = true;
       const config = await fetchConfig();
-      configStore.defaultQbittorrentUrl = config.qbittorrentUrl;
-      console.log('✅ Config loaded successfully');
+      configStore.downloaders = config.downloaders;
+      console.log(`✅ Config loaded: ${config.downloaders.length} downloader(s)`);
     } catch (error) {
       console.error('❌ Failed to load config:', error);
     } finally {
