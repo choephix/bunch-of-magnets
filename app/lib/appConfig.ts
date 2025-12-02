@@ -6,6 +6,7 @@ export interface DownloaderConfig {
   username: string;
   password: string;
   type: DownloaderType;
+  basePath: string;
 }
 
 export interface AppConfig {
@@ -50,6 +51,5 @@ export function getDefaultDownloader(): DownloaderConfig {
 /** Returns downloaders without sensitive credentials (for client) */
 export function getPublicDownloaderList() {
   const config = loadAppConfig();
-  return config.downloaders.map(({ name, url, type }) => ({ name, url, type }));
+  return config.downloaders.map(({ name, url, type, basePath }) => ({ name, url, type, basePath }));
 }
-

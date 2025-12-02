@@ -1,5 +1,6 @@
 import { proxy } from 'valtio';
 import { fetchConfig, PublicDownloader } from '../services/configService';
+import { appStateActions } from './appStateStore';
 import { settingsStore } from './settingsStore';
 
 interface ConfigState {
@@ -34,10 +35,24 @@ export const configActions = {
       const config = await fetchConfig();
       configStore.downloaders = config.downloaders;
       console.log(`✅ Config loaded: ${config.downloaders.length} downloader(s)`);
+
+      // Initialize basePath from active downloader
+      const active = getActiveDownloader();
+      if (active?.basePath) {
+        appStateActions.setBasePath(active.basePath);
+      }
     } catch (error) {
       console.error('❌ Failed to load config:', error);
     } finally {
       configStore.isLoading = false;
+    }
+  },
+
+  /** Call when selected downloader changes to update basePath */
+  updateBasePath: () => {
+    const active = getActiveDownloader();
+    if (active?.basePath) {
+      appStateActions.setBasePath(active.basePath);
     }
   },
 };
