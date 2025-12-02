@@ -1,6 +1,13 @@
 import { proxy, subscribe } from 'valtio';
 
-type LibraryType = 'Live Action Series' | 'Cartoon Series' | 'Anime Series' | 'Live Action Movies' | 'Cartoon Movies' | 'Anime Movies' | 'Documentaries';
+type LibraryType =
+  | 'Live Action Series'
+  | 'Cartoon Series'
+  | 'Anime Series'
+  | 'Live Action Movies'
+  | 'Cartoon Movies'
+  | 'Anime Movies'
+  | 'Documentaries';
 
 interface SettingsState {
   librarySuggestions: Record<LibraryType, boolean>;
@@ -57,5 +64,5 @@ export const settingsActions = {
   resetToDefaults: () => {
     settingsStore.librarySuggestions = { ...defaultSettings.librarySuggestions };
     settingsStore.qbittorrentUrlOverride = null;
-  }
-}; 
+  },
+};

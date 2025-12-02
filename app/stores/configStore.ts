@@ -15,7 +15,7 @@ const initialState: ConfigState = {
 export const configStore = proxy<ConfigState>(initialState);
 
 // Computed getter for effective URL (override takes precedence)
-export const getQbittorrentUrl = () => 
+export const getQbittorrentUrl = () =>
   settingsStore.qbittorrentUrlOverride || configStore.defaultQbittorrentUrl;
 
 export const configActions = {
@@ -31,4 +31,4 @@ export const configActions = {
       configStore.isLoading = false;
     }
   },
-}; 
+};

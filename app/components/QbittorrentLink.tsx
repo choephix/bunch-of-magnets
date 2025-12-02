@@ -5,9 +5,9 @@ import { settingsStore } from '../stores/settingsStore';
 export const QbittorrentLink = () => {
   const { defaultQbittorrentUrl } = useSnapshot(configStore);
   const { qbittorrentUrlOverride } = useSnapshot(settingsStore);
-  
+
   const qbittorrentUrl = qbittorrentUrlOverride || defaultQbittorrentUrl;
-  
+
   if (!qbittorrentUrl) return null;
 
   return (
@@ -22,4 +22,4 @@ export const QbittorrentLink = () => {
       </a>
     </div>
   );
-}; 
+};
