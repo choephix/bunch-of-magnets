@@ -5,6 +5,7 @@ export async function addTorrents(
   savePath: string,
   category: string,
   tags: string[],
+  downloaderName?: string,
 ): Promise<void> {
   try {
     const response = await fetch("/api/qbittorrent", {
@@ -17,6 +18,7 @@ export async function addTorrents(
         savePath,
         category,
         tags,
+        downloaderName,
       }),
     });
 
