@@ -1,12 +1,13 @@
 export type DownloaderType = 'qbittorrent' | 'transmission';
 
 export interface DownloaderConfig {
-  name: string;
-  url: string;
-  username: string;
-  password: string;
-  type: DownloaderType;
-  basePath: string;
+  name: string
+  url: string
+  username: string
+  password: string
+  type: DownloaderType
+  basePath: string
+  librarySuggestions: Record<string, boolean>
 }
 
 export interface AppConfig {
@@ -50,6 +51,12 @@ export function getDefaultDownloader(): DownloaderConfig {
 
 /** Returns downloaders without sensitive credentials (for client) */
 export function getPublicDownloaderList() {
-  const config = loadAppConfig();
-  return config.downloaders.map(({ name, url, type, basePath }) => ({ name, url, type, basePath }));
+  const config = loadAppConfig()
+  return config.downloaders.map(({ name, url, type, basePath, librarySuggestions }) => ({
+    name,
+    url,
+    type,
+    basePath,
+    librarySuggestions,
+  }))
 }

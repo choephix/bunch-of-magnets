@@ -1,70 +1,71 @@
-import { proxy, subscribe } from 'valtio';
-
-type LibraryType =
-  | 'Live Action Series'
-  | 'Cartoon Series'
-  | 'Anime Series'
-  | 'Live Action Movies'
-  | 'Cartoon Movies'
-  | 'Anime Movies'
-  | 'Documentaries';
+import { proxy, subscribe } from 'valtio'
 
 interface SettingsState {
-  librarySuggestions: Record<LibraryType, boolean>;
-  selectedDownloader: string | null;
+  /** User's overrides per downloader URL */
+  librarySuggestionOverrides: Record<string, Record<string, boolean>>
+  selectedDownloader: string | null
 }
 
-const STORAGE_KEY = 'bunch-of-magnets-settings';
+const STORAGE_KEY = 'bunch-of-magnets-settings'
 
 const defaultSettings: SettingsState = {
-  librarySuggestions: {
-    'Live Action Series': true,
-    'Cartoon Series': false,
-    'Anime Series': true,
-    'Live Action Movies': false,
-    'Cartoon Movies': false,
-    'Anime Movies': false,
-    'Documentaries': true,
-  },
+  librarySuggestionOverrides: {},
   selectedDownloader: null,
-};
+}
 
 const loadSettings = (): SettingsState => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      const parsed = JSON.parse(saved);
-      // Merge with defaults to handle new fields for existing users
-      // Remove old qbittorrentUrlOverride if present
-      const { qbittorrentUrlOverride: _, ...rest } = parsed;
-      return { ...defaultSettings, ...rest };
+      const parsed = JSON.parse(saved)
+      // Remove old fields if present
+      const { qbittorrentUrlOverride: _, librarySuggestions: __, ...rest } = parsed
+      return { ...defaultSettings, ...rest }
     }
   } catch (error) {
-    console.error('❌ Failed to load settings:', error);
+    console.error('❌ Failed to load settings:', error)
   }
-  return defaultSettings;
-};
+  return defaultSettings
+}
 
-export const settingsStore = proxy<SettingsState>(loadSettings());
+export const settingsStore = proxy<SettingsState>(loadSettings())
 
 // Subscribe to changes and save to localStorage
 subscribe(settingsStore, () => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsStore));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsStore))
   } catch (error) {
-    console.error('❌ Failed to save settings:', error);
+    console.error('❌ Failed to save settings:', error)
   }
-});
+})
+
+/** Get effective librarySuggestions for a downloader (overrides merged with defaults) */
+export const getLibrarySuggestionsForDownloader = (
+  downloaderUrl: string,
+  defaults: Record<string, boolean>
+): Record<string, boolean> => {
+  const overrides = settingsStore.librarySuggestionOverrides[downloaderUrl] ?? {}
+  return { ...defaults, ...overrides }
+}
 
 export const settingsActions = {
-  toggleLibrarySuggestion: (type: LibraryType) => {
-    settingsStore.librarySuggestions[type] = !settingsStore.librarySuggestions[type];
+  setLibrarySuggestion: (downloaderUrl: string, type: string, enabled: boolean) => {
+    if (!settingsStore.librarySuggestionOverrides[downloaderUrl]) {
+      settingsStore.librarySuggestionOverrides[downloaderUrl] = {}
+    }
+    settingsStore.librarySuggestionOverrides[downloaderUrl][type] = enabled
   },
+
   setSelectedDownloader: (name: string | null) => {
-    settingsStore.selectedDownloader = name?.trim() || null;
+    settingsStore.selectedDownloader = name?.trim() || null
   },
+
+  resetLibrarySuggestionsForDownloader: (downloaderUrl: string) => {
+    delete settingsStore.librarySuggestionOverrides[downloaderUrl]
+  },
+
   resetToDefaults: () => {
-    settingsStore.librarySuggestions = { ...defaultSettings.librarySuggestions };
-    settingsStore.selectedDownloader = null;
+    settingsStore.librarySuggestionOverrides = {}
+    settingsStore.selectedDownloader = null
   },
-};
+}

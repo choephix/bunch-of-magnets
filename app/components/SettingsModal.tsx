@@ -1,8 +1,12 @@
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
 import { useSnapshot } from 'valtio'
-import { configActions, configStore } from '../stores/configStore'
-import { settingsActions, settingsStore } from '../stores/settingsStore'
+import { configActions, configStore, getActiveDownloader } from '../stores/configStore'
+import {
+  getLibrarySuggestionsForDownloader,
+  settingsActions,
+  settingsStore,
+} from '../stores/settingsStore'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -11,7 +15,7 @@ interface SettingsModalProps {
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null)
-  const { librarySuggestions, selectedDownloader } = useSnapshot(settingsStore)
+  const { selectedDownloader, librarySuggestionOverrides } = useSnapshot(settingsStore)
   const { downloaders } = useSnapshot(configStore)
 
   const handleClickOutside = useCallback(
@@ -35,6 +39,12 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   if (!isOpen) return null
 
   const effectiveSelection = selectedDownloader ?? downloaders[0]?.name ?? null
+  const activeDownloader = getActiveDownloader()
+
+  // Get effective library suggestions for active downloader
+  const librarySuggestions = activeDownloader
+    ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
+    : {}
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -87,28 +97,32 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
           <div>
             <h3 className="text-sm font-medium text-gray-300 mb-2">Library Suggestions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {Object.entries(librarySuggestions).map(([type, enabled]) => (
-                <button
-                  key={type}
-                  onClick={() =>
-                    settingsActions.toggleLibrarySuggestion(type as keyof typeof librarySuggestions)
-                  }
-                  className={`flex items-center justify-between px-2 py-0.5 rounded-r-2xl rounded-l-md transition-colors ${
-                    enabled
-                      ? 'bg-blue-900/50 text-blue-200 hover:bg-blue-800/50'
-                      : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'
-                  }`}
-                >
-                  <span>{type}</span>
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 transition-colors ${
-                      enabled ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+            {activeDownloader ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(librarySuggestions).map(([type, enabled]) => (
+                  <button
+                    key={type}
+                    onClick={() =>
+                      settingsActions.setLibrarySuggestion(activeDownloader.url, type, !enabled)
+                    }
+                    className={`flex items-center justify-between px-2 py-0.5 rounded-r-2xl rounded-l-md transition-colors ${
+                      enabled
+                        ? 'bg-blue-900/50 text-blue-200 hover:bg-blue-800/50'
+                        : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'
                     }`}
-                  />
-                </button>
-              ))}
-            </div>
+                  >
+                    <span>{type}</span>
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 transition-colors ${
+                        enabled ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Select a downloader first</p>
+            )}
           </div>
         </div>
       </div>

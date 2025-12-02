@@ -1,10 +1,11 @@
 export type DownloaderType = 'qbittorrent' | 'transmission';
 
 export interface PublicDownloader {
-  name: string;
-  url: string;
-  type: DownloaderType;
-  basePath: string;
+  name: string
+  url: string
+  type: DownloaderType
+  basePath: string
+  librarySuggestions: Record<string, boolean>
 }
 
 export interface Config {

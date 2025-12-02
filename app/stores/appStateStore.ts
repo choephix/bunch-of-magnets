@@ -1,7 +1,8 @@
 import { proxy, useSnapshot } from 'valtio'
 import { parseFirstTvShowName, parseSeasons } from '../services/tvShowService'
 import { MagnetLink } from '../utils/magnet'
-import { settingsStore } from './settingsStore'
+import { configStore, getActiveDownloader } from './configStore'
+import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
 
 type SuggestionPill = {
   type: 'showname' | 'season' | 'library'
@@ -201,9 +202,15 @@ export const useAppState = () => useSnapshot(appStateStore)
 
 export const getAllSuggestionsSnapshot = () => {
   const appState = useSnapshot(appStateStore)
-  const settings = useSnapshot(settingsStore)
+  useSnapshot(settingsStore) // subscribe to overrides changes
+  useSnapshot(configStore) // subscribe to downloader changes
 
-  const librarySuggestions = Object.entries(settings.librarySuggestions)
+  const activeDownloader = getActiveDownloader()
+  const effectiveSuggestions = activeDownloader
+    ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
+    : {}
+
+  const librarySuggestions = Object.entries(effectiveSuggestions)
     .filter(([_, enabled]) => enabled)
     .map(([type]) => ({ type: 'library' as const, value: type }))
 
