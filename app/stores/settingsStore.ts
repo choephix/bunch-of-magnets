@@ -4,6 +4,7 @@ type LibraryType = 'Live Action Series' | 'Cartoon Series' | 'Anime Series' | 'L
 
 interface SettingsState {
   librarySuggestions: Record<LibraryType, boolean>;
+  qbittorrentUrlOverride: string | null;
 }
 
 const STORAGE_KEY = 'bunch-of-magnets-settings';
@@ -18,13 +19,16 @@ const defaultSettings: SettingsState = {
     'Anime Movies': false,
     'Documentaries': true,
   },
+  qbittorrentUrlOverride: null,
 };
 
 const loadSettings = (): SettingsState => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Merge with defaults to handle new fields for existing users
+      return { ...defaultSettings, ...parsed };
     }
   } catch (error) {
     console.error('❌ Failed to load settings:', error);
@@ -47,7 +51,11 @@ export const settingsActions = {
   toggleLibrarySuggestion: (type: LibraryType) => {
     settingsStore.librarySuggestions[type] = !settingsStore.librarySuggestions[type];
   },
+  setQbittorrentUrlOverride: (url: string | null) => {
+    settingsStore.qbittorrentUrlOverride = url?.trim() || null;
+  },
   resetToDefaults: () => {
     settingsStore.librarySuggestions = { ...defaultSettings.librarySuggestions };
+    settingsStore.qbittorrentUrlOverride = null;
   }
 }; 

@@ -1,8 +1,12 @@
 import { useSnapshot } from 'valtio';
 import { configStore } from '../stores/configStore';
+import { settingsStore } from '../stores/settingsStore';
 
 export const QbittorrentLink = () => {
-  const { qbittorrentUrl } = useSnapshot(configStore);
+  const { defaultQbittorrentUrl } = useSnapshot(configStore);
+  const { qbittorrentUrlOverride } = useSnapshot(settingsStore);
+  
+  const qbittorrentUrl = qbittorrentUrlOverride || defaultQbittorrentUrl;
   
   if (!qbittorrentUrl) return null;
 

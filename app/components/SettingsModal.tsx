@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { settingsStore, settingsActions } from '../stores/settingsStore';
+import { configStore } from '../stores/configStore';
 import { useSnapshot } from 'valtio';
 
 interface SettingsModalProps {
@@ -10,7 +11,8 @@ interface SettingsModalProps {
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const { librarySuggestions } = useSnapshot(settingsStore);
+  const { librarySuggestions, qbittorrentUrlOverride } = useSnapshot(settingsStore);
+  const { defaultQbittorrentUrl } = useSnapshot(configStore);
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
     if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
@@ -43,7 +45,22 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         </button>
         <h2 className="text-xl font-bold mb-4">Settings</h2>
         
-        <div className="space-y-4">
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-300 mb-2">qBittorrent URL</h3>
+            <input
+              type="url"
+              value={qbittorrentUrlOverride ?? ''}
+              onChange={(e) => settingsActions.setQbittorrentUrlOverride(e.target.value)}
+              placeholder={defaultQbittorrentUrl ?? 'http://localhost:8080'}
+              className="w-full px-3 py-2 bg-gray-700/50 rounded-lg text-gray-200 placeholder-gray-500 
+                         border border-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Override the default URL for opening qBittorrent Web UI
+            </p>
+          </div>
+
           <div>
             <h3 className="text-sm font-medium text-gray-300 mb-2">Library Suggestions</h3>
             <div className="space-y-2">
