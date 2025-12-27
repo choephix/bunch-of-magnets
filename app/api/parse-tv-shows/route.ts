@@ -1,12 +1,12 @@
-import { createGroq } from "@ai-sdk/groq";
-import { generateText, Message } from "ai";
-import { z } from "zod";
+import { createGroq } from '@ai-sdk/groq'
+import { generateText, Message } from 'ai'
+import { z } from 'zod'
 
-const groq = createGroq({ apiKey: process.env.GROQ_API_KEY });
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
 const inputSchema = z.object({
   filenames: z.array(z.string()),
-});
+})
 
 const examples = `
 Input: "The.Mandalorian.S03E01.1080p.WEB-DL.DDP5.1.H.264-NTb.mkv"
@@ -86,33 +86,33 @@ Output: Dark
 
 Input: Sherlock_S01E01_1080p_HDTV_x264.mkv
 Output: Sherlock
-`;
+`
 
 const exampleMessages = examples
-  .split("\n")
+  .split('\n')
   .filter((line) => line.trim())
   .map((line) => {
-    if (line.startsWith("Input:")) {
+    if (line.startsWith('Input:')) {
       return {
-        role: "user" as const,
-        content: line.replace("Input:", "").trim(),
-      };
-    } else if (line.startsWith("Output:")) {
+        role: 'user' as const,
+        content: line.replace('Input:', '').trim(),
+      }
+    } else if (line.startsWith('Output:')) {
       return {
-        role: "assistant" as const,
-        content: line.replace("Output:", "").trim(),
-      };
+        role: 'assistant' as const,
+        content: line.replace('Output:', '').trim(),
+      }
     }
-    return "";
+    return ''
   })
-  .filter(Boolean) as Message[];
+  .filter(Boolean) as Message[]
 
 export async function POST(req: Request) {
   try {
-    const { filenames } = inputSchema.parse(await req.json());
+    const { filenames } = inputSchema.parse(await req.json())
 
     const { text } = await generateText({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq('llama-3.3-70b-versatile'),
       system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
       Follow these rules:
       1. Remove all quality indicators (720p, 1080p, 4K, etc.)
@@ -129,22 +129,19 @@ export async function POST(req: Request) {
       messages: [
         ...exampleMessages,
         {
-          role: "user",
-          content: filenames.join("\n"),
+          role: 'user',
+          content: filenames.join('\n'),
         },
       ],
-    });
+    })
 
-    return new Response(JSON.stringify({ showNames: text.split("\n") }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ showNames: text.split('\n') }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
   } catch (error) {
-    console.error("🔴 Error parsing TV show names:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to parse TV show names" }),
-      {
-        status: 400,
-      },
-    );
+    console.error('🔴 Error parsing TV show names:', error)
+    return new Response(JSON.stringify({ error: 'Failed to parse TV show names' }), {
+      status: 400,
+    })
   }
 }

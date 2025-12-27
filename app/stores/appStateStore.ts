@@ -134,10 +134,10 @@ export const appStateActions = {
       suggestion.type === 'library'
         ? 0
         : suggestion.type === 'showname'
-        ? 1
-        : suggestion.type === 'season'
-        ? 2
-        : -1
+          ? 1
+          : suggestion.type === 'season'
+            ? 2
+            : -1
 
     if (targetIndex === -1) return
 

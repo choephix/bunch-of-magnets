@@ -1,4 +1,4 @@
-export type DownloaderType = 'qbittorrent' | 'transmission';
+export type DownloaderType = 'qbittorrent' | 'transmission'
 
 export interface DownloaderConfig {
   name: string
@@ -11,42 +11,42 @@ export interface DownloaderConfig {
 }
 
 export interface AppConfig {
-  downloaders: DownloaderConfig[];
+  downloaders: DownloaderConfig[]
 }
 
-let cachedConfig: AppConfig | null = null;
+let cachedConfig: AppConfig | null = null
 
 export function loadAppConfig(): AppConfig {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig) return cachedConfig
 
-  const base64 = process.env.APP_CONFIG_BASE64;
+  const base64 = process.env.APP_CONFIG_BASE64
   if (!base64) {
-    throw new Error('Missing APP_CONFIG_BASE64 env var');
+    throw new Error('Missing APP_CONFIG_BASE64 env var')
   }
 
-  const decoded = Buffer.from(base64, 'base64').toString('utf8');
-  cachedConfig = JSON.parse(decoded) as AppConfig;
+  const decoded = Buffer.from(base64, 'base64').toString('utf8')
+  cachedConfig = JSON.parse(decoded) as AppConfig
 
   if (!cachedConfig.downloaders?.length) {
-    throw new Error('APP_CONFIG_BASE64 must contain at least one downloader');
+    throw new Error('APP_CONFIG_BASE64 must contain at least one downloader')
   }
 
-  console.log(`🔧 Loaded ${cachedConfig.downloaders.length} downloader(s) from config`);
-  return cachedConfig;
+  console.log(`🔧 Loaded ${cachedConfig.downloaders.length} downloader(s) from config`)
+  return cachedConfig
 }
 
 export function getDownloaderByName(name: string): DownloaderConfig {
-  const config = loadAppConfig();
-  const downloader = config.downloaders.find(d => d.name === name);
+  const config = loadAppConfig()
+  const downloader = config.downloaders.find((d) => d.name === name)
   if (!downloader) {
-    throw new Error(`Downloader "${name}" not found in config`);
+    throw new Error(`Downloader "${name}" not found in config`)
   }
-  return downloader;
+  return downloader
 }
 
 export function getDefaultDownloader(): DownloaderConfig {
-  const config = loadAppConfig();
-  return config.downloaders[0];
+  const config = loadAppConfig()
+  return config.downloaders[0]
 }
 
 /** Returns downloaders without sensitive credentials (for client) */

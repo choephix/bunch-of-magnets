@@ -1,60 +1,57 @@
-import { useCallback, useState } from "react";
-import { useProcessMagnetLinkQueries } from "../hooks/useMagnetQuery";
-import { appStateActions, useAppState } from "../stores/appStateStore";
-import { queryHistoryActions } from "../stores/queryHistoryStore";
-import { debounce } from "../utils/magnet";
-import { HistoryModal } from "./HistoryModal";
-import { MagnetExtractionLoader } from "./MagnetExtractionLoader";
+import { useCallback, useState } from 'react'
+import { useProcessMagnetLinkQueries } from '../hooks/useMagnetQuery'
+import { appStateActions, useAppState } from '../stores/appStateStore'
+import { queryHistoryActions } from '../stores/queryHistoryStore'
+import { debounce } from '../utils/magnet'
+import { HistoryModal } from './HistoryModal'
+import { MagnetExtractionLoader } from './MagnetExtractionLoader'
 
 interface MagnetLinksProps {
-  onSubmit: (e: React.FormEvent) => Promise<void>;
-  isLoading: boolean;
+  onSubmit: (e: React.FormEvent) => Promise<void>
+  isLoading: boolean
 }
 
 export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
-  const [magnetInput, setMagnetInput] = useState("");
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const { magnetLinks, isExtracting } = useAppState();
+  const [magnetInput, setMagnetInput] = useState('')
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const { magnetLinks, isExtracting } = useAppState()
 
-  const { error, processMagnetLinkQueries } = useProcessMagnetLinkQueries();
+  const { error, processMagnetLinkQueries } = useProcessMagnetLinkQueries()
 
   const removeMagnetLink = (index: number) => {
-    console.log(`🗑️ Removing magnet link at index ${index}`);
-    appStateActions.removeMagnetLink(index);
-  };
+    console.log(`🗑️ Removing magnet link at index ${index}`)
+    appStateActions.removeMagnetLink(index)
+  }
 
   const handleMagnetInput = async (text: string) => {
-    setMagnetInput(text);
-    processMagnetLinks(text);
-  };
+    setMagnetInput(text)
+    processMagnetLinks(text)
+  }
 
   const processMagnetLinks = useCallback(
     debounce(async (text: string) => {
-      const lines = text.split("\n");
-      await processMagnetLinkQueries(lines);
-      setMagnetInput("");
+      const lines = text.split('\n')
+      await processMagnetLinkQueries(lines)
+      setMagnetInput('')
     }, 150),
     []
-  );
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
-    await onSubmit(e);
-    queryHistoryActions.saveCandidateToHistory();
-  };
+    await onSubmit(e)
+    queryHistoryActions.saveCandidateToHistory()
+  }
 
   const handleHistorySelect = (query: string) => {
-    setIsHistoryOpen(false);
-    setMagnetInput(query);
-    handleMagnetInput(query);
-  };
+    setIsHistoryOpen(false)
+    setMagnetInput(query)
+    handleMagnetInput(query)
+  }
 
   return (
     <div className="space-y-3">
       <div className="mb-0.5">
-        <label
-          htmlFor="magnetInput"
-          className="block text-xs font-medium mb-0.5 text-gray-300"
-        >
+        <label htmlFor="magnetInput" className="block text-xs font-medium mb-0.5 text-gray-300">
           Magnet Links
         </label>
         <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
@@ -65,7 +62,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
             onDoubleClick={() => setIsHistoryOpen(true)}
             disabled={isExtracting}
             className={`w-full h-14 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none p-3 ${
-              isExtracting ? "opacity-50 cursor-not-allowed" : ""
+              isExtracting ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             placeholder="Paste magnet link here (magnet:?xt=...) or a website url with magnet links. Double click to view history."
           />
@@ -78,25 +75,20 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
                   <div
                     key={index}
                     className={`text-xs hover:bg-gray-800 rounded transition-colors flex items-center group cursor-pointer ${
-                      item.ignore ? "opacity-40" : "text-gray-200"
+                      item.ignore ? 'opacity-40' : 'text-gray-200'
                     }`}
-                    onClick={() =>
-                      appStateActions.toggleIgnoreMagnetLink(index)
-                    }
+                    onClick={() => appStateActions.toggleIgnoreMagnetLink(index)}
                   >
                     <div className="flex-1 min-w-0 flex items-center space-x-2 px-3">
-                      <span
-                        className="truncate"
-                        title={item.displayName || item.magnetUrl}
-                      >
+                      <span className="truncate" title={item.displayName || item.magnetUrl}>
                         {item.displayName || item.magnetUrl}
                       </span>
                     </div>
                     <button
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        removeMagnetLink(index);
+                        e.preventDefault()
+                        e.stopPropagation()
+                        removeMagnetLink(index)
                       }}
                       className="ml-1 px-1.5 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500 focus:ring-offset-1 focus:ring-offset-gray-900 rounded text-xl font-medium hover:bg-gray-800/50"
                       aria-label="Remove magnet link"
@@ -149,7 +141,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
             mt-3"
           >
             {isLoading
-              ? "Adding..."
+              ? 'Adding...'
               : `Add ${magnetLinks.filter((m) => !m.ignore).length} Torrents`}
           </button>
         </>
@@ -161,5 +153,5 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
         onSelect={handleHistorySelect}
       />
     </div>
-  );
-};
+  )
+}

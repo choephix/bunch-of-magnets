@@ -1,4 +1,4 @@
-export type DownloaderType = 'qbittorrent' | 'transmission';
+export type DownloaderType = 'qbittorrent' | 'transmission'
 
 export interface PublicDownloader {
   name: string
@@ -9,22 +9,22 @@ export interface PublicDownloader {
 }
 
 export interface Config {
-  downloaders: PublicDownloader[];
+  downloaders: PublicDownloader[]
 }
 
 export async function fetchConfig(): Promise<Config> {
   try {
-    console.log('⚙️ Fetching configuration...');
-    const response = await fetch('/api/config');
+    console.log('⚙️ Fetching configuration...')
+    const response = await fetch('/api/config')
 
     if (!response.ok) {
-      throw new Error('Failed to fetch configuration');
+      throw new Error('Failed to fetch configuration')
     }
 
-    const data = await response.json();
-    return data;
+    const data = await response.json()
+    return data
   } catch (error) {
-    console.error('❌ Error fetching configuration:', error);
-    throw error;
+    console.error('❌ Error fetching configuration:', error)
+    throw error
   }
 }

@@ -1,12 +1,12 @@
 interface StatusMessageProps {
   status: {
-    type: 'success' | 'error';
-    message: string;
-  } | null;
+    type: 'success' | 'error'
+    message: string
+  } | null
 }
 
 export const StatusMessage = ({ status }: StatusMessageProps) => {
-  if (!status) return null;
+  if (!status) return null
 
   return (
     <div
@@ -18,5 +18,5 @@ export const StatusMessage = ({ status }: StatusMessageProps) => {
     >
       {status.message}
     </div>
-  );
-}; 
+  )
+}

@@ -60,34 +60,34 @@ Authorization: Basic <base64(username:password)>
 
 ```typescript
 async function makeRequest(payload: object): Promise<Response> {
-  const url = `${TRANSMISSION_URL}/transmission/rpc`;
-  const auth = Buffer.from(`${USERNAME}:${PASSWORD}`).toString('base64');
+  const url = `${TRANSMISSION_URL}/transmission/rpc`
+  const auth = Buffer.from(`${USERNAME}:${PASSWORD}`).toString('base64')
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Authorization': `Basic ${auth}`,
-  };
+    Authorization: `Basic ${auth}`,
+  }
 
   // First attempt
   let response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
-  });
+  })
 
   // Handle CSRF token requirement
   if (response.status === 409) {
-    const sessionId = response.headers.get('X-Transmission-Session-Id');
-    headers['X-Transmission-Session-Id'] = sessionId!;
+    const sessionId = response.headers.get('X-Transmission-Session-Id')
+    headers['X-Transmission-Session-Id'] = sessionId!
 
     response = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-    });
+    })
   }
 
-  return response;
+  return response
 }
 ```
 
@@ -367,18 +367,18 @@ Unlike qBittorrent which accepts multiple URLs in one call, Transmission's `torr
 ```typescript
 async function addTorrents(magnetLinks: string[], downloadDir: string) {
   const results = await Promise.all(
-    magnetLinks.map(magnet =>
+    magnetLinks.map((magnet) =>
       makeRequest({
         method: 'torrent-add',
         arguments: {
-          'filename': magnet,
+          filename: magnet,
           'download-dir': downloadDir,
         },
       })
     )
-  );
+  )
 
-  return results;
+  return results
 }
 ```
 
@@ -401,15 +401,15 @@ async function addTorrents(magnetLinks: string[], downloadDir: string) {
 Always check `response.result`:
 
 ```typescript
-const data = await response.json();
+const data = await response.json()
 
 if (data.result !== 'success') {
-  throw new Error(`Transmission error: ${data.result}`);
+  throw new Error(`Transmission error: ${data.result}`)
 }
 
 // Check for duplicate (not an error, but good to know)
 if (data.arguments['torrent-duplicate']) {
-  console.log('⚠️ Torrent already exists');
+  console.log('⚠️ Torrent already exists')
 }
 ```
 
@@ -428,7 +428,7 @@ const body = new URLSearchParams({
   savepath: '/storage/path',
   category: 'tv-shows',
   tags: 'hd,1080p',
-});
+})
 ```
 
 **Transmission:**
@@ -438,11 +438,11 @@ const body = new URLSearchParams({
 const body = {
   method: 'torrent-add',
   arguments: {
-    'filename': magnetLink, // single URL
+    filename: magnetLink, // single URL
     'download-dir': '/storage/path',
-    'labels': ['tv-shows', 'hd', '1080p'],
+    labels: ['tv-shows', 'hd', '1080p'],
   },
-};
+}
 ```
 
 ### Key Differences Summary
@@ -463,19 +463,16 @@ const body = {
 ### Required Changes
 
 1. **New environment variables:**
-
    - `TRANSMISSION_URL`
    - `TRANSMISSION_USERNAME`
    - `TRANSMISSION_PASSWORD`
 
 2. **New API route:** `/api/transmission/route.ts`
-
    - Handle session ID caching/refresh
    - Map internal request format to Transmission's format
    - Loop through magnets (one request per magnet)
 
 3. **Service layer:** `/app/services/transmissionService.ts`
-
    - Abstract client selection (qBittorrent vs Transmission)
    - Common interface for both clients
 
@@ -501,38 +498,38 @@ const body = {
 
 ```typescript
 interface TransmissionRequest {
-  method: string;
-  arguments?: Record<string, unknown>;
-  tag?: number;
+  method: string
+  arguments?: Record<string, unknown>
+  tag?: number
 }
 
 interface TransmissionResponse {
-  result: string;
-  arguments?: Record<string, unknown>;
-  tag?: number;
+  result: string
+  arguments?: Record<string, unknown>
+  tag?: number
 }
 
 interface TorrentAddArgs {
-  'filename'?: string; // magnet link or URL
-  'metainfo'?: string; // base64 torrent
-  'download-dir'?: string;
-  'paused'?: boolean;
-  'labels'?: string[];
-  'peer-limit'?: number;
-  'bandwidthPriority'?: -1 | 0 | 1;
+  filename?: string // magnet link or URL
+  metainfo?: string // base64 torrent
+  'download-dir'?: string
+  paused?: boolean
+  labels?: string[]
+  'peer-limit'?: number
+  bandwidthPriority?: -1 | 0 | 1
 }
 
 interface TorrentAddedResponse {
   'torrent-added'?: {
-    id: number;
-    name: string;
-    hashString: string;
-  };
+    id: number
+    name: string
+    hashString: string
+  }
   'torrent-duplicate'?: {
-    id: number;
-    name: string;
-    hashString: string;
-  };
+    id: number
+    name: string
+    hashString: string
+  }
 }
 ```
 
