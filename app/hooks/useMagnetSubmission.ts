@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MagnetLink } from '../utils/magnet'
+import { MagnetLink, parseTags } from '../utils/magnet'
 import { addTorrents } from '../services/qbittorrentService'
 import { appStateActions } from '../stores/appStateStore'
 import { getActiveDownloader } from '../stores/configStore'
@@ -23,11 +23,15 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
       const selectedLinks = magnetLinks.filter((link) => !link.ignore)
       const activeDownloader = getActiveDownloader()
 
+      const allTags = selectedLinks
+        .flatMap((link) => parseTags(link.displayName))
+        .filter((tag, index, arr) => arr.indexOf(tag) === index)
+
       await addTorrents(
         selectedLinks,
         savePath,
         'tvshow-anime',
-        selectedLinks.map((link) => link.displayName).filter(Boolean),
+        allTags,
         activeDownloader?.name
       )
 
