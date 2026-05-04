@@ -1,8 +1,18 @@
 import { useState } from 'react'
 import { MagnetLink, parseTags } from '../utils/magnet'
 import { addTorrents } from '../services/qbittorrentService'
-import { appStateActions } from '../stores/appStateStore'
+import { appStateActions, appStateStore } from '../stores/appStateStore'
 import { getActiveDownloader } from '../stores/configStore'
+
+const deriveCategory = (savePath: string, basePath: string): string => {
+  let relativePath = savePath
+  if (basePath && savePath.startsWith(basePath)) {
+    relativePath = savePath.slice(basePath.length)
+  }
+  const segments = relativePath.split('/').filter(Boolean)
+  const firstMeaningful = segments.find((s) => s !== '_')
+  return firstMeaningful || ''
+}
 
 interface UseMagnetSubmissionResult {
   isLoading: boolean
@@ -27,10 +37,12 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
         .flatMap((link) => parseTags(link.displayName))
         .filter((tag, index, arr) => arr.indexOf(tag) === index)
 
+      const category = deriveCategory(savePath, appStateStore.basePath)
+
       await addTorrents(
         selectedLinks,
         savePath,
-        'tvshow-anime',
+        category,
         allTags,
         activeDownloader?.name
       )
