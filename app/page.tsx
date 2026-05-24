@@ -9,7 +9,6 @@ import { SettingsModal } from './components/SettingsModal'
 import { StatusMessage } from './components/StatusMessage'
 import { SuggestionPills } from './components/SuggestionPills'
 import { useMagnetSubmission } from './hooks/useMagnetSubmission'
-import { fetchConfig } from './services/configService'
 import { useAppState } from './stores/appStateStore'
 import { useProcessMagnetLinkQueries } from './hooks/useMagnetQuery'
 import { configActions } from './stores/configStore'
@@ -20,7 +19,6 @@ export default function Home() {
   const { isLoading, status, submitMagnetLinks } = useMagnetSubmission()
 
   useLoadConfig()
-
   useUrlMagnetQuery()
 
   return (
@@ -59,15 +57,8 @@ const useLoadConfig = () => {
 
 const useUrlMagnetQuery = () => {
   const { processMagnetLinkQueries } = useProcessMagnetLinkQueries()
-  const handlerRef = useRef(processMagnetLinkQueries)
-  handlerRef.current = processMagnetLinkQueries
-
-  const hasRun = useRef(false)
 
   useEffect(() => {
-    if (hasRun.current) return
-    hasRun.current = true
-
     const searchParams = new URLSearchParams(window.location.search)
     const query = searchParams.get('q')
     if (!query) return
@@ -78,6 +69,8 @@ const useUrlMagnetQuery = () => {
     const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
     window.history.replaceState({}, '', newUrl)
 
-    handlerRef.current([query])
+    void processMagnetLinkQueries([query])
+    // Run once on mount; subsequent renders see no `q` after replaceState above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }
