@@ -1,8 +1,22 @@
 import { createGroq } from '@ai-sdk/groq'
 import { generateText, Message } from 'ai'
+import { Redis } from '@upstash/redis'
 import { z } from 'zod'
 
 const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
+
+const hasUpstash =
+  !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN
+
+const redis = hasUpstash
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+  : null
+
+const CACHE_PREFIX = 'bunch-of-magnets:tv-show-name:'
+const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 const inputSchema = z.object({
   filenames: z.array(z.string()),
@@ -107,35 +121,108 @@ const exampleMessages = examples
   })
   .filter(Boolean) as Message[]
 
+const cacheKeyFor = (filename: string) => `${CACHE_PREFIX}${filename}`
+
+const readCache = async (filenames: string[]): Promise<Map<string, string>> => {
+  const result = new Map<string, string>()
+  if (!redis || filenames.length === 0) return result
+
+  try {
+    const keys = filenames.map(cacheKeyFor)
+    const cached = (await redis.mget<(string | null)[]>(...keys)) ?? []
+    cached.forEach((value, idx) => {
+      if (typeof value === 'string' && value.length > 0) {
+        result.set(filenames[idx], value)
+      }
+    })
+    if (result.size > 0) {
+      console.log(`💾 Cache hit for ${result.size}/${filenames.length} TV name(s)`)
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to read TV-show name cache:', error)
+  }
+  return result
+}
+
+const writeCache = async (entries: Map<string, string>) => {
+  if (!redis || entries.size === 0) return
+  try {
+    const pipe = redis.pipeline()
+    for (const [filename, name] of entries) {
+      pipe.set(cacheKeyFor(filename), name, { ex: CACHE_TTL_SECONDS })
+    }
+    await pipe.exec()
+  } catch (error) {
+    console.warn('⚠️ Failed to write TV-show name cache:', error)
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { filenames } = inputSchema.parse(await req.json())
 
-    const { text } = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
-      system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
-      Follow these rules:
-      1. Remove all quality indicators (720p, 1080p, 4K, etc.)
-      2. Remove all season/episode information (S01E01, S1E1, etc.)
-      3. Remove all release group names and tags
-      4. Remove all file extensions
-      5. Keep only the main show name
-      6. Return the show name in a clean, standardized format
-      7. Overall use your intuition to determine the correct show name
-      8. Replace colons etc with dashes, to ensure valid folder name for the show
-      
-      Small note: Sometimes it may be a movie. That's fine. Just return the name.
-      `,
-      messages: [
-        ...exampleMessages,
-        {
-          role: 'user',
-          content: filenames.join('\n'),
-        },
-      ],
+    if (filenames.length === 0) {
+      return new Response(JSON.stringify({ showNames: [] }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const cached = await readCache(filenames)
+    const missing = filenames.filter((f) => !cached.has(f))
+
+    let freshResults: string[] = []
+    if (missing.length > 0) {
+      const { text } = await generateText({
+        model: groq('llama-3.3-70b-versatile'),
+        system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
+        Follow these rules:
+        1. Remove all quality indicators (720p, 1080p, 4K, etc.)
+        2. Remove all season/episode information (S01E01, S1E1, etc.)
+        3. Remove all release group names and tags
+        4. Remove all file extensions
+        5. Keep only the main show name
+        6. Return the show name in a clean, standardized format
+        7. Overall use your intuition to determine the correct show name
+        8. Replace colons etc with dashes, to ensure valid folder name for the show
+        9. Output exactly one show name per input line, in the same order, with no extra commentary
+
+        Small note: Sometimes it may be a movie. That's fine. Just return the name.
+        `,
+        messages: [
+          ...exampleMessages,
+          {
+            role: 'user',
+            content: missing.join('\n'),
+          },
+        ],
+      })
+
+      freshResults = text
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      // Persist what we successfully parsed (best-effort align by index).
+      const toCache = new Map<string, string>()
+      missing.forEach((filename, idx) => {
+        const value = freshResults[idx]
+        if (value) toCache.set(filename, value)
+      })
+      void writeCache(toCache)
+    }
+
+    // Reconstruct response in original input order.
+    const freshByFilename = new Map<string, string>()
+    missing.forEach((filename, idx) => {
+      const value = freshResults[idx]
+      if (value) freshByFilename.set(filename, value)
     })
 
-    return new Response(JSON.stringify({ showNames: text.split('\n') }), {
+    const showNames = filenames.map((filename) => {
+      return cached.get(filename) ?? freshByFilename.get(filename) ?? ''
+    })
+
+    return new Response(JSON.stringify({ showNames }), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (error) {
