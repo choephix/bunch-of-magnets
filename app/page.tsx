@@ -59,25 +59,25 @@ const useLoadConfig = () => {
 
 const useUrlMagnetQuery = () => {
   const { processMagnetLinkQueries } = useProcessMagnetLinkQueries()
+  const handlerRef = useRef(processMagnetLinkQueries)
+  handlerRef.current = processMagnetLinkQueries
+
+  const hasRun = useRef(false)
 
   useEffect(() => {
-    const handleUrlQuery = async () => {
-      const searchParams = new URLSearchParams(window.location.search)
-      const query = searchParams.get('q')
+    if (hasRun.current) return
+    hasRun.current = true
 
-      if (query) {
-        console.log('🔍 Found magnet query in URL:', query)
+    const searchParams = new URLSearchParams(window.location.search)
+    const query = searchParams.get('q')
+    if (!query) return
 
-        // Remove the query parameter from the URL
-        searchParams.delete('q')
-        const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-        window.history.replaceState({}, '', newUrl)
+    console.log('🔍 Found magnet query in URL:', query)
 
-        // Process the query
-        await processMagnetLinkQueries([query])
-      }
-    }
+    searchParams.delete('q')
+    const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    window.history.replaceState({}, '', newUrl)
 
-    handleUrlQuery()
-  }, [processMagnetLinkQueries])
+    handlerRef.current([query])
+  }, [])
 }

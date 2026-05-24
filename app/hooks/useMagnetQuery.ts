@@ -58,7 +58,7 @@ export const useProcessMagnetLinkQueries = () => {
   const processMagnetLinkQueries = async (queries: string[]): Promise<void> => {
     setError(null)
 
-    if (isExtracting) {
+    if (appStateStore.isExtracting) {
       throw new Error('Already extracting magnets')
     }
 

@@ -89,7 +89,7 @@ export const appStateActions = {
     appStateStore.magnetLinks.unshift(...newLinks)
 
     if (newLinks.length > 0) {
-      await updateSuggestionsFromMagnetLinks(links)
+      await updateSuggestionsFromMagnetLinks(newLinks)
     }
   },
 
