@@ -54,12 +54,14 @@ export async function POST(request: Request) {
       'Content-Type': 'application/x-www-form-urlencoded',
     }
 
-    const bodyDict = {
+    const bodyDict: Record<string, string> = {
       urls: allMagnetLinks,
       savepath: savePath,
-      category: category,
       autoTMM: 'false',
       tags: Array.isArray(tags) ? tags.join(',') : '',
+    }
+    if (typeof category === 'string' && category.length > 0) {
+      bodyDict.category = category
     }
     const body = new URLSearchParams(bodyDict)
     console.log('🔍 Body:', body.toString())
