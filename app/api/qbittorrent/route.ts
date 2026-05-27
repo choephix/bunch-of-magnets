@@ -61,25 +61,41 @@ export async function POST(request: Request) {
       autoTMM: 'false',
       tags: Array.isArray(tags) ? tags.join(',') : '',
     }
-    const body = new URLSearchParams(bodyDict)
-    console.log('🔍 Body:', body.toString())
+    const addTorrents = async (params: Record<string, string>) => {
+      const body = new URLSearchParams(params)
+      console.log('🔍 Body:', body.toString())
 
-    const response = await fetch(`${downloader.url}/api/v2/torrents/add`, {
-      method: 'POST',
-      headers: headers,
-      body: body,
-    })
-
-    const responseText = await response.text()
-    if (!response.ok || responseText.startsWith('Fail')) {
-      console.error('❌ qBittorrent API error:', responseText)
-      return NextResponse.json({
-        results: [{ success: false, error: responseText }],
+      const response = await fetch(`${downloader.url}/api/v2/torrents/add`, {
+        method: 'POST',
+        headers: headers,
+        body: body,
       })
+
+      return {
+        ok: response.ok,
+        text: await response.text(),
+      }
+    }
+
+    let addResult = await addTorrents(bodyDict)
+
+    if (!addResult.ok || addResult.text.startsWith('Fail')) {
+      if (category) {
+        console.warn('⚠️ qBittorrent rejected category, retrying without category:', category)
+        const { category: _, ...bodyWithoutCategory } = bodyDict
+        addResult = await addTorrents(bodyWithoutCategory)
+      }
+
+      if (!addResult.ok || addResult.text.startsWith('Fail')) {
+        console.error('❌ qBittorrent API error:', addResult.text)
+        return NextResponse.json({
+          results: [{ success: false, error: addResult.text || 'qBittorrent rejected request' }],
+        })
+      }
     }
 
     return NextResponse.json({
-      results: [{ success: true, data: responseText }],
+      results: [{ success: true, data: addResult.text }],
     })
   } catch (error) {
     console.error('❌ API Error:', error)
