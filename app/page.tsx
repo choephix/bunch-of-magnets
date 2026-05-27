@@ -25,6 +25,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-3 sm:p-6">
+      <div
+        className="fixed left-1 top-1 z-50 h-2 w-2 rounded-full bg-lime-400"
+        title="deploy marker eb1e31b"
+      />
       <main className="max-w-2xl mx-auto">
         <h1 className="text-xl py-2 font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
           Bunch of Magnets
