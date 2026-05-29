@@ -1,8 +1,11 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
 import { NextResponse } from 'next/server'
 
+const stripTrailingSlash = (url: string) => url.replace(/\/+$/, '')
+
 async function loginToQbittorrent(url: string, username: string, password: string) {
-  const response = await fetch(`${url}/api/v2/auth/login`, {
+  const base = stripTrailingSlash(url)
+  const response = await fetch(`${base}/api/v2/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ username, password }),
@@ -63,25 +66,43 @@ export async function POST(request: Request) {
     if (typeof category === 'string' && category.length > 0) {
       bodyDict.category = category
     }
-    const body = new URLSearchParams(bodyDict)
-    console.log('🔍 Body:', body.toString())
 
-    const response = await fetch(`${downloader.url}/api/v2/torrents/add`, {
-      method: 'POST',
-      headers: headers,
-      body: body,
-    })
+    const addBase = stripTrailingSlash(downloader.url)
+    const addTorrents = async (params: Record<string, string>) => {
+      const body = new URLSearchParams(params)
+      console.log('🔍 Body:', body.toString())
 
-    const responseText = await response.text()
-    if (!response.ok || responseText.startsWith('Fail')) {
-      console.error('❌ qBittorrent API error:', responseText)
-      return NextResponse.json({
-        results: [{ success: false, error: responseText }],
+      const response = await fetch(`${addBase}/api/v2/torrents/add`, {
+        method: 'POST',
+        headers: headers,
+        body: body,
       })
+
+      return {
+        ok: response.ok,
+        text: await response.text(),
+      }
+    }
+
+    let addResult = await addTorrents(bodyDict)
+
+    if (!addResult.ok || addResult.text.startsWith('Fail')) {
+      if (bodyDict.category) {
+        console.warn('⚠️ qBittorrent rejected category, retrying without category:', bodyDict.category)
+        const { category: _, ...bodyWithoutCategory } = bodyDict
+        addResult = await addTorrents(bodyWithoutCategory)
+      }
+
+      if (!addResult.ok || addResult.text.startsWith('Fail')) {
+        console.error('❌ qBittorrent API error:', addResult.text)
+        return NextResponse.json({
+          results: [{ success: false, error: addResult.text || 'qBittorrent rejected request' }],
+        })
+      }
     }
 
     return NextResponse.json({
-      results: [{ success: true, data: responseText }],
+      results: [{ success: true, data: addResult.text }],
     })
   } catch (error) {
     console.error('❌ API Error:', error)
