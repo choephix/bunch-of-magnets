@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { MagnetLink, parseMagnetLinks } from '../utils/magnet'
-import { appStateActions, useAppState } from '../stores/appStateStore'
+import { appStateActions, appStateStore } from '../stores/appStateStore'
 import { queryHistoryActions } from '../stores/queryHistoryStore'
 
 export const useProcessMagnetLinkQueries = () => {
   const [error, setError] = useState<string | null>(null)
-  const { isExtracting } = useAppState()
 
   const isUrl = (text: string): boolean => {
     if (text.startsWith('magnet:?')) {
@@ -37,11 +36,9 @@ export const useProcessMagnetLinkQueries = () => {
         throw new Error(data.error || 'Failed to extract magnet links')
       }
 
-      // Create a mutable copy of the magnet links
       const mutableLinks = [...data.magnetLinks]
       appStateActions.addMagnetLinks(mutableLinks)
 
-      // Save URL as candidate query
       queryHistoryActions.setCandidateQuery(url)
     } catch (error) {
       console.error('❌ Error extracting magnets from URL:', error)
@@ -58,7 +55,7 @@ export const useProcessMagnetLinkQueries = () => {
   const processMagnetLinkQueries = async (queries: string[]): Promise<void> => {
     setError(null)
 
-    if (isExtracting) {
+    if (appStateStore.isExtracting) {
       throw new Error('Already extracting magnets')
     }
 

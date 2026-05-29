@@ -1,8 +1,11 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
 import { NextResponse } from 'next/server'
 
+const stripTrailingSlash = (url: string) => url.replace(/\/+$/, '')
+
 async function loginToQbittorrent(url: string, username: string, password: string) {
-  const response = await fetch(`${url}/api/v2/auth/login`, {
+  const base = stripTrailingSlash(url)
+  const response = await fetch(`${base}/api/v2/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ username, password }),
@@ -54,18 +57,22 @@ export async function POST(request: Request) {
       'Content-Type': 'application/x-www-form-urlencoded',
     }
 
-    const bodyDict = {
+    const bodyDict: Record<string, string> = {
       urls: allMagnetLinks,
       savepath: savePath,
-      category: category,
       autoTMM: 'false',
       tags: Array.isArray(tags) ? tags.join(',') : '',
     }
+    if (typeof category === 'string' && category.length > 0) {
+      bodyDict.category = category
+    }
+
+    const addBase = stripTrailingSlash(downloader.url)
     const addTorrents = async (params: Record<string, string>) => {
       const body = new URLSearchParams(params)
       console.log('🔍 Body:', body.toString())
 
-      const response = await fetch(`${downloader.url}/api/v2/torrents/add`, {
+      const response = await fetch(`${addBase}/api/v2/torrents/add`, {
         method: 'POST',
         headers: headers,
         body: body,
@@ -80,8 +87,8 @@ export async function POST(request: Request) {
     let addResult = await addTorrents(bodyDict)
 
     if (!addResult.ok || addResult.text.startsWith('Fail')) {
-      if (category) {
-        console.warn('⚠️ qBittorrent rejected category, retrying without category:', category)
+      if (bodyDict.category) {
+        console.warn('⚠️ qBittorrent rejected category, retrying without category:', bodyDict.category)
         const { category: _, ...bodyWithoutCategory } = bodyDict
         addResult = await addTorrents(bodyWithoutCategory)
       }

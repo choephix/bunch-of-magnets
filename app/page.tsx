@@ -9,7 +9,6 @@ import { SettingsModal } from './components/SettingsModal'
 import { StatusMessage } from './components/StatusMessage'
 import { SuggestionPills } from './components/SuggestionPills'
 import { useMagnetSubmission } from './hooks/useMagnetSubmission'
-import { fetchConfig } from './services/configService'
 import { useAppState } from './stores/appStateStore'
 import { useProcessMagnetLinkQueries } from './hooks/useMagnetQuery'
 import { configActions } from './stores/configStore'
@@ -20,7 +19,6 @@ export default function Home() {
   const { isLoading, status, submitMagnetLinks } = useMagnetSubmission()
 
   useLoadConfig()
-
   useUrlMagnetQuery()
 
   return (
@@ -65,23 +63,18 @@ const useUrlMagnetQuery = () => {
   const { processMagnetLinkQueries } = useProcessMagnetLinkQueries()
 
   useEffect(() => {
-    const handleUrlQuery = async () => {
-      const searchParams = new URLSearchParams(window.location.search)
-      const query = searchParams.get('q')
+    const searchParams = new URLSearchParams(window.location.search)
+    const query = searchParams.get('q')
+    if (!query) return
 
-      if (query) {
-        console.log('🔍 Found magnet query in URL:', query)
+    console.log('🔍 Found magnet query in URL:', query)
 
-        // Remove the query parameter from the URL
-        searchParams.delete('q')
-        const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-        window.history.replaceState({}, '', newUrl)
+    searchParams.delete('q')
+    const newUrl = `${window.location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    window.history.replaceState({}, '', newUrl)
 
-        // Process the query
-        await processMagnetLinkQueries([query])
-      }
-    }
-
-    handleUrlQuery()
-  }, [processMagnetLinkQueries])
+    void processMagnetLinkQueries([query])
+    // Run once on mount; subsequent renders see no `q` after replaceState above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 }

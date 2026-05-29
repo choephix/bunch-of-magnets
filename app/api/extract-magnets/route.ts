@@ -1,34 +1,78 @@
 import { NextResponse } from 'next/server'
 import { parseMagnetLinks } from '@/app/utils/magnet'
 
-const TORRENT_PATHS = ['/torrent', '/download'] // Add more paths as needed
+const TORRENT_PATHS = ['/torrent', '/download']
+
+const FETCH_TIMEOUT_MS = 12_000
+const MAX_CONCURRENT_TORRENT_PAGE_FETCHES = 8
+const USER_AGENT =
+  'Mozilla/5.0 (compatible; BunchOfMagnets/1.0; +https://github.com/choephix/bunch-of-magnets)'
+
+const MAGNET_HREF_REGEX = /href="(magnet:\?xt=urn:btih:[^"]+)"/g
+const MAGNET_RAW_REGEX = /magnet:\?xt=urn:btih:[^"\s<>]+/g
+const HTTP_URL_REGEX = /https?:\/\/[^\s"'<>]+/g
+const HREF_REGEX = /href="([^"]+)"/g
+
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json }
+
+async function fetchTextWithTimeout(
+  url: string,
+  init?: RequestInit
+): Promise<{ contentType: string; text: string }> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+        ...(init?.headers ?? {}),
+      },
+    })
+    return {
+      contentType: response.headers.get('content-type') ?? '',
+      text: await response.text(),
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 export async function POST(request: Request) {
   try {
     const { url } = await request.json()
 
-    if (!url) {
+    if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
     console.log('🌐 Fetching URL:', url)
-    const response = await fetch(url)
+    const { contentType, text } = await fetchTextWithTimeout(url)
 
     let magnetUrls: string[] = []
 
-    // Clone the response so we can try both JSON and text parsing
-    const responseClone = response.clone()
+    const trimmed = text.trimStart()
+    const hasJsonContentType = contentType.includes('application/json')
+    const looksLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[')
 
-    // Try to parse as JSON first
-    try {
-      const json = await response.json()
-      console.log('📦 Detected JSON response')
-      magnetUrls = await handleUserJsonUrl(json)
-    } catch (jsonError) {
-      // If JSON parsing fails, treat as HTML/text
+    if (hasJsonContentType || looksLikeJson) {
+      try {
+        const json = JSON.parse(text) as Json
+        console.log(
+          hasJsonContentType
+            ? '📦 Detected JSON response (via Content-Type)'
+            : '📦 Detected JSON response (via heuristic)'
+        )
+        magnetUrls = await handleUserJsonUrl(json)
+      } catch {
+        console.log('📄 Treating response as HTML/text')
+        magnetUrls = await handleUserHtmlUrl(url, text)
+      }
+    } else {
       console.log('📄 Treating response as HTML/text')
-      const html = await responseClone.text()
-      magnetUrls = await handleUserHtmlUrl(url, html)
+      magnetUrls = await handleUserHtmlUrl(url, text)
     }
 
     const magnetLinks = parseMagnetLinks(magnetUrls.join('\n'))
@@ -46,139 +90,83 @@ export async function POST(request: Request) {
   }
 }
 
-/**
- * Extracts magnet URLs from an HTML string using regex pattern matching
- * @param html - The HTML string to search for magnet URLs
- * @returns Array of magnet URLs found in the HTML
- */
-function extractMagnetUrls(html: string): string[] {
-  const magnetRegex = /href="(magnet:\?xt=urn:btih:[^"]+)"/g
-  const matches = [...html.matchAll(magnetRegex)]
-  const urls = matches.map((match) => match[1])
-  const uniqueUrls = [...new Set(urls)]
-  return uniqueUrls
+function extractMagnetUrlsFromHtml(html: string): string[] {
+  const matches = [...html.matchAll(MAGNET_HREF_REGEX)]
+  return [...new Set(matches.map((match) => match[1]))]
 }
 
-/**
- * Recursively extracts magnet URLs from a JSON object
- * @param obj - The JSON object to search
- * @returns Array of magnet URLs found in the JSON
- */
-function extractMagnetUrlsFromJson(obj: any): string[] {
+function extractMagnetUrlsFromJson(obj: Json): string[] {
   const magnetUrls: string[] = []
-  const magnetRegex = /magnet:\?xt=urn:btih:[^"]+/g
-
-  function traverse(current: any) {
+  const traverse = (current: Json) => {
     if (typeof current === 'string') {
-      const matches = current.match(magnetRegex)
-      if (matches) {
-        magnetUrls.push(...matches)
-      }
+      const matches = current.match(MAGNET_RAW_REGEX)
+      if (matches) magnetUrls.push(...matches)
     } else if (Array.isArray(current)) {
       current.forEach(traverse)
-    } else if (typeof current === 'object' && current !== null) {
+    } else if (current && typeof current === 'object') {
       Object.values(current).forEach(traverse)
     }
   }
-
   traverse(obj)
   return [...new Set(magnetUrls)]
 }
 
-/**
- * Recursively extracts HTTP(S) URLs from a JSON object
- * @param obj - The JSON object to search
- * @returns Array of HTTP(S) URLs found in the JSON
- */
-function extractHttpUrlsFromJson(obj: any): string[] {
+function extractHttpUrlsFromJson(obj: Json): string[] {
   const httpUrls: string[] = []
-  const httpRegex = /https?:\/\/[^\s"']+/g
-
-  function traverse(current: any) {
+  const traverse = (current: Json) => {
     if (typeof current === 'string') {
-      const matches = current.match(httpRegex)
-      if (matches) {
-        httpUrls.push(...matches)
-      }
+      const matches = current.match(HTTP_URL_REGEX)
+      if (matches) httpUrls.push(...matches)
     } else if (Array.isArray(current)) {
       current.forEach(traverse)
-    } else if (typeof current === 'object' && current !== null) {
+    } else if (current && typeof current === 'object') {
       Object.values(current).forEach(traverse)
     }
   }
-
   traverse(obj)
   return [...new Set(httpUrls)]
 }
 
-/**
- * Handles a JSON response from the user's URL
- * @param json - The JSON object to process
- * @returns Array of magnet URLs found
- */
-async function handleUserJsonUrl(json: any): Promise<string[]> {
+async function handleUserJsonUrl(json: Json): Promise<string[]> {
   console.log('📦 Processing JSON response')
   let magnetUrls = extractMagnetUrlsFromJson(json)
 
   if (magnetUrls.length === 0) {
-    console.log('🔍 No direct magnet links found in JSON, searching for HTTP URLs...')
+    console.log('🔍 No direct magnet links found in JSON, searching HTTP URLs...')
     const httpUrls = extractHttpUrlsFromJson(json)
     console.log('🔗 Found HTTP URLs:', httpUrls.length)
     magnetUrls = await extractMagnetLinksFromAllHtmlUrls(httpUrls)
   }
-
   return magnetUrls
 }
 
-/**
- * Handles an HTML response from the user's URL
- * @param url - The original URL
- * @param html - The HTML content
- * @returns Array of magnet URLs found
- */
 async function handleUserHtmlUrl(url: string, html: string): Promise<string[]> {
-  let magnetUrls = extractMagnetUrls(html)
-
+  let magnetUrls = extractMagnetUrlsFromHtml(html)
   if (magnetUrls.length === 0) {
     console.log('🔍 No direct magnet links found, performing deeper search...')
     magnetUrls = await performDeeperSearchOnHTML(url, html)
   }
-
   return magnetUrls
 }
 
-/**
- * Performs a deeper search on HTML content by following torrent page links
- */
 async function performDeeperSearchOnHTML(originalUrl: string, html: string): Promise<string[]> {
   const originalUrlObj = new URL(originalUrl)
   const baseUrl = `${originalUrlObj.protocol}//${originalUrlObj.host}`
 
-  // Extract all href URLs
-  const hrefRegex = /href="([^"]+)"/g
-  const hrefMatches = [...html.matchAll(hrefRegex)]
+  const hrefMatches = [...html.matchAll(HREF_REGEX)]
   const allUrls = hrefMatches.map((match) => match[1])
 
   return extractMagnetLinksFromAllHtmlUrls(allUrls, baseUrl, originalUrlObj.host)
 }
 
-/**
- * Extracts magnet links from a list of HTML URLs
- * @param urls - List of URLs to process
- * @param baseUrl - Base URL for resolving relative URLs
- * @param originalHost - Original host for filtering
- * @returns Array of magnet URLs found
- */
 async function extractMagnetLinksFromAllHtmlUrls(
   urls: string[],
   baseUrl?: string,
   originalHost?: string
 ): Promise<string[]> {
-  // Filter URLs by same host and torrent paths
   const torrentUrls = urls
     .map((href) => {
       try {
-        // Handle relative URLs if baseUrl is provided
         const absoluteUrl = baseUrl ? new URL(href, baseUrl) : new URL(href)
         return absoluteUrl.toString()
       } catch {
@@ -190,7 +178,7 @@ async function extractMagnetLinksFromAllHtmlUrls(
       try {
         const urlObj = new URL(url)
         return (
-          !originalHost || // If no originalHost provided, accept all URLs
+          !originalHost ||
           (urlObj.host === originalHost &&
             TORRENT_PATHS.some((path) => urlObj.pathname.startsWith(path)))
         )
@@ -199,27 +187,46 @@ async function extractMagnetLinksFromAllHtmlUrls(
       }
     })
 
-  console.log('🔗 Found potential torrent pages:', torrentUrls.length)
+  const uniqueTorrentUrls = [...new Set(torrentUrls)]
+  console.log('🔗 Found potential torrent pages:', uniqueTorrentUrls.length)
 
-  // Fetch all torrent pages in parallel
-  const magnetPromises = torrentUrls.map(async (url) => {
+  const fetchPage = async (url: string): Promise<string | null> => {
     try {
       console.log('📥 Fetching torrent page:', url)
-      const response = await fetch(url)
-      const pageHtml = await response.text()
-      const magnets = extractMagnetUrls(pageHtml)
-
+      const { text } = await fetchTextWithTimeout(url)
+      const magnets = extractMagnetUrlsFromHtml(text)
       if (magnets.length > 1) {
-        console.warn('⚠️ Multiple magnet links found on page:', magnets)
+        console.warn('⚠️ Multiple magnet links found on page:', url, magnets.length)
       }
-
-      return magnets[0] // Take first magnet link if any
+      return magnets[0] ?? null
     } catch (error) {
       console.error('❌ Error fetching torrent page:', url, error)
       return null
     }
-  })
+  }
 
-  const results = await Promise.all(magnetPromises)
+  const results = await mapWithConcurrency(
+    uniqueTorrentUrls,
+    fetchPage,
+    MAX_CONCURRENT_TORRENT_PAGE_FETCHES
+  )
   return results.filter((magnet): magnet is string => magnet !== null)
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  worker: (item: T) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let cursor = 0
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const idx = cursor++
+      if (idx >= items.length) return
+      results[idx] = await worker(items[idx])
+    }
+  })
+  await Promise.all(runners)
+  return results
 }
