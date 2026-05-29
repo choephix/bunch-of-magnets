@@ -99,7 +99,6 @@ Base64 encode this file and set as `APP_CONFIG_BASE64`. Use `./update-env.sh` he
 ```bash
 pnpm dev      # Turbopack dev server on :3000
 pnpm build    # Production build + type check
-pnpm lint     # ESLint
 ```
 
 ## Key Flows

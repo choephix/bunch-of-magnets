@@ -26,7 +26,7 @@ Live at [bunch-of-magnets.vercel.app](https://bunch-of-magnets.vercel.app)
 
 ### Prerequisites
 
-- Node.js 18.18+
+- Node.js 20.9+
 - pnpm (preferred), npm or yarn
 - A reachable qBittorrent instance with WebUI enabled
 
@@ -70,7 +70,6 @@ See [.env.example](./.env.example) for the full list. Briefly:
 ```bash
 pnpm dev      # turbopack on :3000
 pnpm build    # production build (also runs type check)
-pnpm lint     # eslint
 ```
 
 ### Tech Stack

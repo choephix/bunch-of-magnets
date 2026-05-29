@@ -5,7 +5,6 @@ const TORRENT_PATHS = ['/torrent', '/download']
 
 const FETCH_TIMEOUT_MS = 12_000
 const MAX_CONCURRENT_TORRENT_PAGE_FETCHES = 8
-const MAX_DEEPER_URLS = 60
 const USER_AGENT =
   'Mozilla/5.0 (compatible; BunchOfMagnets/1.0; +https://github.com/choephix/bunch-of-magnets)'
 
@@ -16,11 +15,14 @@ const HREF_REGEX = /href="([^"]+)"/g
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json }
 
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+async function fetchTextWithTimeout(
+  url: string,
+  init?: RequestInit
+): Promise<{ contentType: string; text: string }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -29,6 +31,10 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
         ...(init?.headers ?? {}),
       },
     })
+    return {
+      contentType: response.headers.get('content-type') ?? '',
+      text: await response.text(),
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -43,32 +49,30 @@ export async function POST(request: Request) {
     }
 
     console.log('🌐 Fetching URL:', url)
-    const response = await fetchWithTimeout(url)
-    const contentType = response.headers.get('content-type') ?? ''
+    const { contentType, text } = await fetchTextWithTimeout(url)
 
     let magnetUrls: string[] = []
 
-    if (contentType.includes('application/json')) {
-      console.log('📦 Detected JSON response (via Content-Type)')
-      const json = (await response.json()) as Json
-      magnetUrls = await handleUserJsonUrl(json)
-    } else {
-      const text = await response.text()
-      const trimmed = text.trimStart()
-      const looksLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[')
-      if (looksLikeJson) {
-        try {
-          const json = JSON.parse(text) as Json
-          console.log('📦 Detected JSON response (via heuristic)')
-          magnetUrls = await handleUserJsonUrl(json)
-        } catch {
-          console.log('📄 Treating response as HTML/text')
-          magnetUrls = await handleUserHtmlUrl(url, text)
-        }
-      } else {
+    const trimmed = text.trimStart()
+    const hasJsonContentType = contentType.includes('application/json')
+    const looksLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[')
+
+    if (hasJsonContentType || looksLikeJson) {
+      try {
+        const json = JSON.parse(text) as Json
+        console.log(
+          hasJsonContentType
+            ? '📦 Detected JSON response (via Content-Type)'
+            : '📦 Detected JSON response (via heuristic)'
+        )
+        magnetUrls = await handleUserJsonUrl(json)
+      } catch {
         console.log('📄 Treating response as HTML/text')
         magnetUrls = await handleUserHtmlUrl(url, text)
       }
+    } else {
+      console.log('📄 Treating response as HTML/text')
+      magnetUrls = await handleUserHtmlUrl(url, text)
     }
 
     const magnetLinks = parseMagnetLinks(magnetUrls.join('\n'))
@@ -183,16 +187,14 @@ async function extractMagnetLinksFromAllHtmlUrls(
       }
     })
 
-  // Deduplicate and cap to avoid spamming origins.
-  const uniqueTorrentUrls = [...new Set(torrentUrls)].slice(0, MAX_DEEPER_URLS)
+  const uniqueTorrentUrls = [...new Set(torrentUrls)]
   console.log('🔗 Found potential torrent pages:', uniqueTorrentUrls.length)
 
   const fetchPage = async (url: string): Promise<string | null> => {
     try {
       console.log('📥 Fetching torrent page:', url)
-      const response = await fetchWithTimeout(url)
-      const pageHtml = await response.text()
-      const magnets = extractMagnetUrlsFromHtml(pageHtml)
+      const { text } = await fetchTextWithTimeout(url)
+      const magnets = extractMagnetUrlsFromHtml(text)
       if (magnets.length > 1) {
         console.warn('⚠️ Multiple magnet links found on page:', url, magnets.length)
       }

@@ -198,16 +198,26 @@ export async function POST(req: Request) {
       })
 
       freshResults = text
+        .trimEnd()
         .split('\n')
         .map((s) => s.trim())
-        .filter(Boolean)
 
-      // Persist what we successfully parsed (best-effort align by index).
+      const canIndexSafely = freshResults.length === missing.length
+      if (!canIndexSafely) {
+        console.warn('⚠️ TV parser returned unexpected line count:', {
+          expected: missing.length,
+          actual: freshResults.length,
+        })
+      }
+
+      // Only cache when model output can be safely paired with input lines.
       const toCache = new Map<string, string>()
-      missing.forEach((filename, idx) => {
-        const value = freshResults[idx]
-        if (value) toCache.set(filename, value)
-      })
+      if (canIndexSafely) {
+        missing.forEach((filename, idx) => {
+          const value = freshResults[idx]
+          if (value) toCache.set(filename, value)
+        })
+      }
       void writeCache(toCache)
     }
 
