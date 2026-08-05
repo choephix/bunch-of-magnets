@@ -274,7 +274,7 @@ export const TorrentProgressPanel = ({
     return (
       <div className="mt-4 text-center">
         <button type="button" onClick={() => setBrowsing(true)} className={ghostLinkClass}>
-          peek at the queue →
+          ⟨ Pika the Q ⟩
         </button>
       </div>
     )
