@@ -1,20 +1,7 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
+import { loginToQbittorrent, stripTrailingSlash } from '@/app/lib/qbittorrent'
+import { extractInfoHash } from '@/app/utils/magnet'
 import { NextResponse } from 'next/server'
-
-const stripTrailingSlash = (url: string) => url.replace(/\/+$/, '')
-
-async function loginToQbittorrent(url: string, username: string, password: string) {
-  const base = stripTrailingSlash(url)
-  const response = await fetch(`${base}/api/v2/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ username, password }),
-  })
-  if (!response.ok) {
-    throw new Error('Failed to login to qBittorrent')
-  }
-  return response.headers.get('set-cookie')
-}
 
 export async function POST(request: Request) {
   try {
@@ -33,11 +20,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const cookie = await loginToQbittorrent(
-      downloader.url,
-      downloader.username,
-      downloader.password
-    )
+    const cookie = await loginToQbittorrent(downloader)
     if (!cookie) {
       return NextResponse.json(
         { error: 'Failed to authenticate with qBittorrent' },
@@ -103,6 +86,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       results: [{ success: true, data: addResult.text }],
+      hashes: magnetLinks
+        .map((url: string) => extractInfoHash(url))
+        .filter((hash: string | null): hash is string => Boolean(hash)),
     })
   } catch (error) {
     console.error('❌ API Error:', error)

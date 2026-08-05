@@ -4,6 +4,39 @@ export type MagnetLink = {
   ignore: boolean
 }
 
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+/** Decodes a 32-char base32 btih into its 40-char hex form. */
+const base32ToHex = (input: string): string | null => {
+  let bits = 0
+  let value = 0
+  let hex = ''
+
+  for (const char of input.toUpperCase()) {
+    const index = BASE32_ALPHABET.indexOf(char)
+    if (index === -1) return null
+    value = (value << 5) | index
+    bits += 5
+    if (bits >= 8) {
+      bits -= 8
+      hex += ((value >>> bits) & 0xff).toString(16).padStart(2, '0')
+    }
+  }
+
+  return hex.length === 40 ? hex : null
+}
+
+/** Extracts the lowercase hex v1 infohash from a magnet URI, if present. */
+export function extractInfoHash(magnetUrl: string): string | null {
+  const match = magnetUrl.match(/xt=urn:btih:([a-zA-Z0-9]+)/)
+  if (!match) return null
+
+  const raw = match[1]
+  if (/^[a-fA-F0-9]{40}$/.test(raw)) return raw.toLowerCase()
+  if (raw.length === 32) return base32ToHex(raw)
+  return null
+}
+
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number

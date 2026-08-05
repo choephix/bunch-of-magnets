@@ -8,6 +8,7 @@ import { SaveDir } from './components/SaveDir'
 import { SettingsModal } from './components/SettingsModal'
 import { StatusMessage } from './components/StatusMessage'
 import { SuggestionPills } from './components/SuggestionPills'
+import { TorrentProgressPanel } from './components/TorrentProgress'
 import { useMagnetSubmission } from './hooks/useMagnetSubmission'
 import { useAppState } from './stores/appStateStore'
 import { useProcessMagnetLinkQueries } from './hooks/useMagnetQuery'
@@ -16,7 +17,8 @@ import { configActions } from './stores/configStore'
 export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { magnetLinks, savePath } = useAppState()
-  const { isLoading, status, submitMagnetLinks } = useMagnetSubmission()
+  const { isLoading, status, trackedHashes, downloaderName, submitMagnetLinks } =
+    useMagnetSubmission()
 
   useLoadConfig()
   useUrlMagnetQuery()
@@ -46,6 +48,8 @@ export default function Home() {
         </div>
 
         <StatusMessage status={status} />
+
+        <TorrentProgressPanel hashes={trackedHashes} downloaderName={downloaderName} />
 
         <QbittorrentLink />
       </main>

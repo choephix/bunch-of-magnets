@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MagnetLink, parseTags } from '../utils/magnet'
+import { MagnetLink, extractInfoHash, parseTags } from '../utils/magnet'
 import { addTorrents } from '../services/qbittorrentService'
 import { appStateActions, appStateStore } from '../stores/appStateStore'
 import { getActiveDownloader } from '../stores/configStore'
@@ -17,16 +17,21 @@ const deriveCategory = (savePath: string, basePath: string): string => {
 interface UseMagnetSubmissionResult {
   isLoading: boolean
   status: { type: 'success' | 'error'; message: string } | null
+  trackedHashes: string[]
+  downloaderName: string | undefined
   submitMagnetLinks: (magnetLinks: MagnetLink[], savePath: string) => Promise<void>
 }
 
 export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [trackedHashes, setTrackedHashes] = useState<string[]>([])
+  const [downloaderName, setDownloaderName] = useState<string | undefined>(undefined)
 
   const submitMagnetLinks = async (magnetLinks: MagnetLink[], savePath: string) => {
     setIsLoading(true)
     setStatus(null)
+    setTrackedHashes([])
 
     try {
       console.log('🚀 Starting to add torrents:', magnetLinks.length)
@@ -39,7 +44,7 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
 
       const category = deriveCategory(savePath, appStateStore.basePath)
 
-      await addTorrents(
+      const addedHashes = await addTorrents(
         selectedLinks,
         savePath,
         category,
@@ -47,10 +52,15 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
         activeDownloader?.name
       )
 
-      setStatus({
-        type: 'success',
-        message: `Added ${selectedLinks.length} torrents`,
-      })
+      const hashes =
+        addedHashes.length > 0
+          ? addedHashes
+          : selectedLinks
+              .map((link) => extractInfoHash(link.magnetUrl))
+              .filter((hash): hash is string => Boolean(hash))
+
+      setTrackedHashes(hashes)
+      setDownloaderName(activeDownloader?.name)
 
       appStateActions.clearMagnetLinks()
     } catch (error) {
@@ -64,5 +74,5 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
     }
   }
 
-  return { isLoading, status, submitMagnetLinks }
+  return { isLoading, status, trackedHashes, downloaderName, submitMagnetLinks }
 }
