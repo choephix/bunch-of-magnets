@@ -8,6 +8,7 @@ import { configStore, getActiveDownloader } from '../stores/configStore'
 import { settingsStore } from '../stores/settingsStore'
 
 const POLL_INTERVAL_MS = 1500
+const ERROR_POLL_INTERVAL_MS = 8000
 const RECENT_LIMIT = 20
 const MAX_EMPTY_POLLS = 20
 /** qBittorrent reports this ETA when it has no estimate yet. */
@@ -187,9 +188,10 @@ export const TorrentProgressPanel = ({
   const hasTracked = hashes.length > 0
   const showRecent = hasTracked ? expanded : browsing
   const activeDownloader = getActiveDownloader()
+  const resolvedDownloaderName = downloaderName ?? activeDownloader?.name
   const downloader =
-    (downloaderName
-      ? configStore.downloaders.find((entry) => entry.name === downloaderName)
+    (resolvedDownloaderName
+      ? configStore.downloaders.find((entry) => entry.name === resolvedDownloaderName)
       : undefined) ?? activeDownloader
 
   useEffect(() => {
@@ -199,22 +201,30 @@ export const TorrentProgressPanel = ({
     let cancelled = false
     let stopped = false
     let timer: number | undefined
+    let inFlight = false
 
     emptyPollsRef.current = 0
 
     const stop = () => {
       stopped = true
       if (timer !== undefined) {
-        window.clearInterval(timer)
+        window.clearTimeout(timer)
         timer = undefined
       }
     }
 
+    const schedule = (delayMs: number) => {
+      if (cancelled || stopped) return
+      timer = window.setTimeout(() => void poll(), delayMs)
+    }
+
     const poll = async () => {
+      if (cancelled || stopped || inFlight) return
+      inFlight = true
       try {
         const result = await fetchTorrentProgress(
           trackedHashes,
-          downloaderName,
+          resolvedDownloaderName,
           showRecent ? RECENT_LIMIT : 0
         )
         if (cancelled) return
@@ -226,25 +236,32 @@ export const TorrentProgressPanel = ({
         emptyPollsRef.current = result.torrents.length === 0 ? emptyPollsRef.current + 1 : 0
 
         // Keep polling while the recent list is visible so it stays live.
-        if (showRecent) return
+        if (!showRecent) {
+          const allComplete =
+            result.torrents.length > 0 && result.torrents.every((torrent) => torrent.progress >= 1)
+          if (allComplete || emptyPollsRef.current >= MAX_EMPTY_POLLS) {
+            stop()
+            return
+          }
+        }
 
-        const allComplete =
-          result.torrents.length > 0 && result.torrents.every((torrent) => torrent.progress >= 1)
-        if (allComplete || emptyPollsRef.current >= MAX_EMPTY_POLLS) stop()
+        schedule(POLL_INTERVAL_MS)
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : 'Failed to fetch torrent progress')
+        schedule(ERROR_POLL_INTERVAL_MS)
+      } finally {
+        inFlight = false
       }
     }
 
     void poll()
-    if (!stopped) timer = window.setInterval(() => void poll(), POLL_INTERVAL_MS)
 
     return () => {
       cancelled = true
       stop()
     }
-  }, [hashKey, downloaderName, hasTracked, browsing, showRecent])
+  }, [hashKey, resolvedDownloaderName, hasTracked, browsing, showRecent])
 
   const byHash = useMemo(() => {
     const map = new Map<string, TorrentProgress>()

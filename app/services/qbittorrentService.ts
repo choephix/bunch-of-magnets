@@ -13,6 +13,20 @@ export type TorrentProgress = {
   addedOn: number
 }
 
+const readJsonOrThrow = async (response: Response): Promise<Record<string, unknown>> => {
+  const text = await response.text()
+  try {
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {}
+  } catch {
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 160)
+    throw new Error(
+      snippet
+        ? `qBittorrent API returned ${response.status}: ${snippet}`
+        : `qBittorrent API returned ${response.status} with an empty body`
+    )
+  }
+}
+
 /** Adds torrents and resolves to the lowercase hex infohashes that were submitted. */
 export async function addTorrents(
   magnetLinks: readonly MagnetLink[],
@@ -36,13 +50,14 @@ export async function addTorrents(
       }),
     })
 
-    const data = await response.json()
+    const data = await readJsonOrThrow(response)
 
-    if (!response.ok || !data.results?.[0]?.success) {
-      throw new Error(data.results?.[0]?.error || data.error || 'Failed to add torrents')
+    if (!response.ok || !(data.results as Array<{ success?: boolean }> | undefined)?.[0]?.success) {
+      const first = (data.results as Array<{ error?: string }> | undefined)?.[0]
+      throw new Error(first?.error || (data.error as string) || 'Failed to add torrents')
     }
 
-    const hashes: string[] = Array.isArray(data.hashes) ? data.hashes : []
+    const hashes: string[] = Array.isArray(data.hashes) ? (data.hashes as string[]) : []
     console.log('✅ Added all torrents successfully:', hashes.length, 'hashes')
 
     return hashes.length
@@ -72,10 +87,10 @@ export async function fetchTorrentProgress(
   const response = await fetch(`/api/qbittorrent/progress?${params.toString()}`, {
     cache: 'no-store',
   })
-  const data = await response.json()
+  const data = await readJsonOrThrow(response)
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch torrent progress')
+    throw new Error((data.error as string) || 'Failed to fetch torrent progress')
   }
 
   return {

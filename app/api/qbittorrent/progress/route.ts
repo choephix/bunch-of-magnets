@@ -1,5 +1,9 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
-import { loginToQbittorrent, stripTrailingSlash } from '@/app/lib/qbittorrent'
+import {
+  fetchWithTimeout,
+  stripTrailingSlash,
+  withQbittorrentSession,
+} from '@/app/lib/qbittorrent'
 import { NextResponse } from 'next/server'
 
 export type TorrentProgress = {
@@ -51,39 +55,36 @@ export async function GET(request: Request) {
       )
     }
 
-    const cookie = await loginToQbittorrent(downloader)
-    if (!cookie) {
-      return NextResponse.json({ error: 'Failed to authenticate with qBittorrent' }, { status: 401 })
-    }
+    const base = stripTrailingSlash(downloader.url)
 
-    const fetchInfo = async (query: string): Promise<TorrentProgress[]> => {
-      const response = await fetch(
-        `${stripTrailingSlash(downloader.url)}/api/v2/torrents/info?${query}`,
-        {
+    const { torrents, recent } = await withQbittorrentSession(downloader, async (cookie) => {
+      const fetchInfo = async (query: string): Promise<TorrentProgress[]> => {
+        const response = await fetchWithTimeout(`${base}/api/v2/torrents/info?${query}`, {
           headers: { Cookie: cookie },
           cache: 'no-store',
+        })
+        if (!response.ok) {
+          throw new Error(`qBittorrent returned ${response.status}`)
         }
-      )
-      if (!response.ok) {
-        throw new Error(`qBittorrent returned ${response.status}`)
+        const raw = (await response.json()) as Array<Record<string, unknown>>
+        return raw.map(toTorrentProgress)
       }
-      const raw = (await response.json()) as Array<Record<string, unknown>>
-      return raw.map(toTorrentProgress)
-    }
 
-    const [torrents, recent] = await Promise.all([
-      hashes.length ? fetchInfo(`hashes=${hashes.join('|')}`) : Promise.resolve([]),
-      recentLimit > 0
-        ? fetchInfo(`sort=added_on&reverse=true&limit=${Math.min(recentLimit, 50)}`)
-        : Promise.resolve([]),
-    ])
+      const [tracked, recentList] = await Promise.all([
+        hashes.length ? fetchInfo(`hashes=${hashes.join('|')}`) : Promise.resolve([]),
+        recentLimit > 0
+          ? fetchInfo(`sort=added_on&reverse=true&limit=${Math.min(recentLimit, 50)}`)
+          : Promise.resolve([]),
+      ])
+
+      return { torrents: tracked, recent: recentList }
+    })
 
     return NextResponse.json({ torrents, recent })
   } catch (error) {
     console.error('❌ Error fetching torrent progress:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch progress' },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Failed to fetch progress'
+    const timedOut = /timed out/i.test(message)
+    return NextResponse.json({ error: message }, { status: timedOut ? 504 : 500 })
   }
 }

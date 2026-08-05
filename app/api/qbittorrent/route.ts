@@ -1,5 +1,9 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
-import { loginToQbittorrent, stripTrailingSlash } from '@/app/lib/qbittorrent'
+import {
+  fetchWithTimeout,
+  stripTrailingSlash,
+  withQbittorrentSession,
+} from '@/app/lib/qbittorrent'
 import { extractInfoHash } from '@/app/utils/magnet'
 import { NextResponse } from 'next/server'
 
@@ -20,25 +24,12 @@ export async function POST(request: Request) {
       )
     }
 
-    const cookie = await loginToQbittorrent(downloader)
-    if (!cookie) {
-      return NextResponse.json(
-        { error: 'Failed to authenticate with qBittorrent' },
-        { status: 401 }
-      )
-    }
-
     const allMagnetLinks = magnetLinks.join('\n')
     console.log('📥 Adding torrent(s) with URLs:', allMagnetLinks)
     console.log('📁 Using save path:', savePath)
     console.log('🏷️ Using category:', category)
     console.log('🏷️ Using tags:', tags)
     console.log('🖥️ Using downloader:', downloader.name)
-
-    const headers = {
-      Cookie: cookie,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    }
 
     const bodyDict: Record<string, string> = {
       urls: allMagnetLinks,
@@ -51,37 +42,55 @@ export async function POST(request: Request) {
     }
 
     const addBase = stripTrailingSlash(downloader.url)
-    const addTorrents = async (params: Record<string, string>) => {
-      const body = new URLSearchParams(params)
-      console.log('🔍 Body:', body.toString())
 
-      const response = await fetch(`${addBase}/api/v2/torrents/add`, {
-        method: 'POST',
-        headers: headers,
-        body: body,
-      })
-
-      return {
-        ok: response.ok,
-        text: await response.text(),
+    const addResult = await withQbittorrentSession(downloader, async (cookie) => {
+      const headers = {
+        Cookie: cookie,
+        'Content-Type': 'application/x-www-form-urlencoded',
       }
-    }
 
-    let addResult = await addTorrents(bodyDict)
+      const addTorrents = async (params: Record<string, string>) => {
+        const body = new URLSearchParams(params)
+        console.log('🔍 Body:', body.toString())
+
+        const response = await fetchWithTimeout(`${addBase}/api/v2/torrents/add`, {
+          method: 'POST',
+          headers,
+          body,
+        })
+
+        return {
+          ok: response.ok,
+          status: response.status,
+          text: await response.text(),
+        }
+      }
+
+      let result = await addTorrents(bodyDict)
+
+      if (!result.ok || result.text.startsWith('Fail')) {
+        if (bodyDict.category) {
+          console.warn(
+            '⚠️ qBittorrent rejected category, retrying without category:',
+            bodyDict.category
+          )
+          const { category: _, ...bodyWithoutCategory } = bodyDict
+          result = await addTorrents(bodyWithoutCategory)
+        }
+      }
+
+      if (result.status === 401 || result.status === 403) {
+        throw new Error(`qBittorrent returned ${result.status}`)
+      }
+
+      return result
+    })
 
     if (!addResult.ok || addResult.text.startsWith('Fail')) {
-      if (bodyDict.category) {
-        console.warn('⚠️ qBittorrent rejected category, retrying without category:', bodyDict.category)
-        const { category: _, ...bodyWithoutCategory } = bodyDict
-        addResult = await addTorrents(bodyWithoutCategory)
-      }
-
-      if (!addResult.ok || addResult.text.startsWith('Fail')) {
-        console.error('❌ qBittorrent API error:', addResult.text)
-        return NextResponse.json({
-          results: [{ success: false, error: addResult.text || 'qBittorrent rejected request' }],
-        })
-      }
+      console.error('❌ qBittorrent API error:', addResult.text)
+      return NextResponse.json({
+        results: [{ success: false, error: addResult.text || 'qBittorrent rejected request' }],
+      })
     }
 
     return NextResponse.json({
@@ -92,11 +101,8 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error('❌ API Error:', error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Internal server error',
-      },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    const timedOut = /timed out/i.test(message)
+    return NextResponse.json({ error: message }, { status: timedOut ? 504 : 500 })
   }
 }
