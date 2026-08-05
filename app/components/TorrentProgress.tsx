@@ -2,7 +2,10 @@
 
 import { ChevronDown, ChevronUp, CircleCheck } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSnapshot } from 'valtio'
 import { fetchTorrentProgress, TorrentProgress } from '../services/qbittorrentService'
+import { configStore, getActiveDownloader } from '../stores/configStore'
+import { settingsStore } from '../stores/settingsStore'
 
 const POLL_INTERVAL_MS = 1500
 const RECENT_LIMIT = 20
@@ -86,6 +89,8 @@ const formatAge = (addedOn: number): string => {
   return `${Math.floor(elapsed / 86400)}d ago`
 }
 
+const ghostLinkClass = 'text-xs text-gray-400 hover:text-blue-400 transition-colors'
+
 const TorrentRow = ({
   torrent,
   showAge = false,
@@ -115,9 +120,8 @@ const TorrentRow = ({
           <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 animate-pulse" />
         ) : (
           <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              isComplete ? 'bg-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
-            }`}
+            className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
+              }`}
             style={{ width: `${Math.min(100, torrent.progress * 100)}%` }}
           />
         )}
@@ -147,6 +151,20 @@ const PlaceholderRow = ({ hash }: { hash: string }) => (
   </div>
 )
 
+const OpenDownloaderLink = ({
+  url,
+  name,
+  className = ghostLinkClass,
+}: {
+  url: string
+  name: string
+  className?: string
+}) => (
+  <a href={url} target="_blank" rel="noopener noreferrer" className={className}>
+    Open {name} →
+  </a>
+)
+
 export const TorrentProgressPanel = ({
   hashes,
   downloaderName,
@@ -154,16 +172,28 @@ export const TorrentProgressPanel = ({
   hashes: readonly string[]
   downloaderName?: string
 }) => {
+  useSnapshot(configStore)
+  useSnapshot(settingsStore)
+
   const [torrents, setTorrents] = useState<TorrentProgress[]>([])
   const [recent, setRecent] = useState<TorrentProgress[]>([])
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  /** Empty-state: user asked to peek at recent torrents before adding any. */
+  const [browsing, setBrowsing] = useState(false)
   const emptyPollsRef = useRef(0)
 
   const hashKey = hashes.join(',')
+  const hasTracked = hashes.length > 0
+  const showRecent = hasTracked ? expanded : browsing
+  const activeDownloader = getActiveDownloader()
+  const downloader =
+    (downloaderName
+      ? configStore.downloaders.find((entry) => entry.name === downloaderName)
+      : undefined) ?? activeDownloader
 
   useEffect(() => {
-    if (!hashKey) return
+    if (!hasTracked && !browsing) return
 
     const trackedHashes = hashKey.split(',').filter(Boolean)
     let cancelled = false
@@ -185,7 +215,7 @@ export const TorrentProgressPanel = ({
         const result = await fetchTorrentProgress(
           trackedHashes,
           downloaderName,
-          expanded ? RECENT_LIMIT : 0
+          showRecent ? RECENT_LIMIT : 0
         )
         if (cancelled) return
 
@@ -195,8 +225,8 @@ export const TorrentProgressPanel = ({
 
         emptyPollsRef.current = result.torrents.length === 0 ? emptyPollsRef.current + 1 : 0
 
-        // While expanded, keep polling so the recent list stays live.
-        if (expanded) return
+        // Keep polling while the recent list is visible so it stays live.
+        if (showRecent) return
 
         const allComplete =
           result.torrents.length > 0 && result.torrents.every((torrent) => torrent.progress >= 1)
@@ -214,7 +244,7 @@ export const TorrentProgressPanel = ({
       cancelled = true
       stop()
     }
-  }, [hashKey, downloaderName, expanded])
+  }, [hashKey, downloaderName, hasTracked, browsing, showRecent])
 
   const byHash = useMemo(() => {
     const map = new Map<string, TorrentProgress>()
@@ -235,55 +265,111 @@ export const TorrentProgressPanel = ({
     [recent, trackedSet]
   )
 
-  if (hashes.length === 0) return null
+  // Collapse empty-state browse once a fresh add starts tracking hashes.
+  useEffect(() => {
+    if (hasTracked && browsing) setBrowsing(false)
+  }, [hasTracked, browsing])
+
+  if (!hasTracked && !browsing) {
+    return (
+      <div className="mt-4 text-center">
+        <button type="button" onClick={() => setBrowsing(true)} className={ghostLinkClass}>
+          peek at the queue →
+        </button>
+      </div>
+    )
+  }
 
   const aggregate =
-    (torrents.reduce((sum, torrent) => sum + torrent.progress, 0) / hashes.length) * 100
+    hashes.length > 0
+      ? (torrents.reduce((sum, torrent) => sum + torrent.progress, 0) / hashes.length) * 100
+      : 0
 
   return (
     <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 mt-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-gray-200">
-          Downloading {hashes.length} {hashes.length === 1 ? 'torrent' : 'torrents'}
-        </span>
-        <span className="font-mono text-sm text-blue-400">{`${aggregate.toFixed(1)}%`}</span>
-      </div>
-      {error && <p className="text-xs text-red-300 mt-1">{error}</p>}
+      {hasTracked ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-gray-200">
+              Downloading {hashes.length} {hashes.length === 1 ? 'torrent' : 'torrents'}
+            </span>
+            <span className="font-mono text-sm text-blue-400">{`${aggregate.toFixed(1)}%`}</span>
+          </div>
+          {error && <p className="text-xs text-red-300 mt-1">{error}</p>}
 
-      <div className="space-y-2 mt-3">
-        {hashes.map((hash) => {
-          const torrent = byHash.get(hash.toLowerCase())
-          return torrent ? (
-            <TorrentRow key={hash} torrent={torrent} />
-          ) : (
-            <PlaceholderRow key={hash} hash={hash} />
-          )
-        })}
-      </div>
+          <div className="space-y-2 mt-3">
+            {hashes.map((hash) => {
+              const torrent = byHash.get(hash.toLowerCase())
+              return torrent ? (
+                <TorrentRow key={hash} torrent={torrent} />
+              ) : (
+                <PlaceholderRow key={hash} hash={hash} />
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-gray-200">Recently in the queue</span>
+            <span className="text-xs text-gray-500">last {RECENT_LIMIT}</span>
+          </div>
+          {error && <p className="text-xs text-red-300 mt-1">{error}</p>}
+        </>
+      )}
 
-      <button
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mt-3"
-      >
-        {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        {expanded ? 'Show less' : 'See more'}
-      </button>
-
-      {expanded && (
-        <div className="border-t border-gray-700 pt-3 mt-3">
-          <p className="text-xs uppercase tracking-wide text-gray-500">Recently added</p>
+      {showRecent && (
+        <div className={hasTracked ? 'border-t border-gray-700 pt-3 mt-3' : 'mt-3'}>
+          {hasTracked && (
+            <p className="text-xs uppercase tracking-wide text-gray-500">Recently added</p>
+          )}
           {recentRows.length > 0 ? (
-            <div className="max-h-80 overflow-y-auto space-y-2 pr-1 mt-2">
+            <div
+              className={`max-h-80 overflow-y-auto space-y-2 pr-1 ${hasTracked ? 'mt-2' : ''}`}
+            >
               {recentRows.map((torrent) => (
                 <TorrentRow key={torrent.hash} torrent={torrent} showAge />
               ))}
             </div>
           ) : (
-            <p className="text-xs text-gray-500 mt-2">No other recent torrents</p>
+            <p className={`text-xs text-gray-500 ${hasTracked ? 'mt-2' : ''}`}>
+              {error ? 'Could not load recent torrents' : 'Queue looks empty'}
+            </p>
           )}
         </div>
       )}
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        {hasTracked ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            {expanded ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
+            {expanded ? 'Show less' : 'See more'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setBrowsing(false)}
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            Hide
+          </button>
+        )}
+
+        {downloader ? (
+          <OpenDownloaderLink url={downloader.url} name={downloader.name} />
+        ) : (
+          <span />
+        )}
+      </div>
     </div>
   )
 }

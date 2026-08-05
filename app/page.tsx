@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { MagnetLinks } from './components/MagnetLinks'
 import { NavButtons } from './components/NavButtons'
-import { QbittorrentLink } from './components/QbittorrentLink'
 import { SaveDir } from './components/SaveDir'
 import { SettingsModal } from './components/SettingsModal'
 import { StatusMessage } from './components/StatusMessage'
@@ -50,8 +49,6 @@ export default function Home() {
         <StatusMessage status={status} />
 
         <TorrentProgressPanel hashes={trackedHashes} downloaderName={downloaderName} />
-
-        <QbittorrentLink />
       </main>
     </div>
   )
