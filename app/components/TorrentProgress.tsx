@@ -152,6 +152,22 @@ const PlaceholderRow = ({ hash }: { hash: string }) => (
   </div>
 )
 
+const SkeletonRow = ({ wide = false }: { wide?: boolean }) => (
+  <div className="space-y-1.5 animate-pulse">
+    <div className="flex items-center gap-2">
+      <div className={`h-3 rounded bg-gray-700 ${wide ? 'w-56' : 'w-40'} max-w-[55%]`} />
+      <div className="ml-auto h-3 w-10 rounded bg-gray-700" />
+      <div className="h-3 w-12 rounded bg-gray-700" />
+    </div>
+    <div className="h-2 w-full rounded-full bg-gray-700" />
+    <div className="flex gap-3">
+      <div className="h-2.5 w-16 rounded bg-gray-700" />
+      <div className="h-2.5 w-12 rounded bg-gray-700" />
+      <div className="h-2.5 w-14 rounded bg-gray-700" />
+    </div>
+  </div>
+)
+
 const OpenDownloaderLink = ({
   url,
   name,
@@ -353,16 +369,15 @@ export const TorrentProgressPanel = ({
                 <TorrentRow key={torrent.hash} torrent={torrent} showAge />
               ))}
             </div>
+          ) : loadingRecent ? (
+            <div className={`space-y-3 ${hasTracked ? 'mt-2' : ''}`}>
+              <SkeletonRow wide />
+              <SkeletonRow />
+              <SkeletonRow wide />
+            </div>
           ) : (
-            <p
-              className={`text-xs text-gray-500 ${hasTracked ? 'mt-2' : ''} ${loadingRecent ? 'animate-pulse' : ''
-                }`}
-            >
-              {error
-                ? 'Could not load recent torrents'
-                : loadingRecent
-                  ? 'Loading queue…'
-                  : 'Queue looks empty'}
+            <p className={`text-xs text-gray-500 ${hasTracked ? 'mt-2' : ''}`}>
+              {error ? 'Could not load recent torrents' : 'Queue looks empty'}
             </p>
           )}
         </div>
