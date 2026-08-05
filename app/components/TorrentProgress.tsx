@@ -182,6 +182,8 @@ export const TorrentProgressPanel = ({
   const [expanded, setExpanded] = useState(false)
   /** Empty-state: user asked to peek at recent torrents before adding any. */
   const [browsing, setBrowsing] = useState(false)
+  /** True until the first recent-list response arrives (success or error). */
+  const [loadingRecent, setLoadingRecent] = useState(false)
   const emptyPollsRef = useRef(0)
 
   const hashKey = hashes.join(',')
@@ -204,6 +206,7 @@ export const TorrentProgressPanel = ({
     let inFlight = false
 
     emptyPollsRef.current = 0
+    if (showRecent) setLoadingRecent(true)
 
     const stop = () => {
       stopped = true
@@ -232,6 +235,7 @@ export const TorrentProgressPanel = ({
         setTorrents(result.torrents)
         setRecent(result.recent)
         setError(null)
+        if (showRecent) setLoadingRecent(false)
 
         emptyPollsRef.current = result.torrents.length === 0 ? emptyPollsRef.current + 1 : 0
 
@@ -249,6 +253,7 @@ export const TorrentProgressPanel = ({
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : 'Failed to fetch torrent progress')
+        if (showRecent) setLoadingRecent(false)
         schedule(ERROR_POLL_INTERVAL_MS)
       } finally {
         inFlight = false
@@ -349,8 +354,15 @@ export const TorrentProgressPanel = ({
               ))}
             </div>
           ) : (
-            <p className={`text-xs text-gray-500 ${hasTracked ? 'mt-2' : ''}`}>
-              {error ? 'Could not load recent torrents' : 'Queue looks empty'}
+            <p
+              className={`text-xs text-gray-500 ${hasTracked ? 'mt-2' : ''} ${loadingRecent ? 'animate-pulse' : ''
+                }`}
+            >
+              {error
+                ? 'Could not load recent torrents'
+                : loadingRecent
+                  ? 'Loading queue…'
+                  : 'Queue looks empty'}
             </p>
           )}
         </div>
