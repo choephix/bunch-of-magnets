@@ -342,7 +342,7 @@ export const TorrentProgressPanel = ({
           )}
           {recentRows.length > 0 ? (
             <div
-              className={`max-h-80 overflow-y-auto space-y-2 pr-1 ${hasTracked ? 'mt-2' : ''}`}
+              className={`thin-scroll max-h-80 overflow-y-auto space-y-2 pr-1 ${hasTracked ? 'mt-2' : ''}`}
             >
               {recentRows.map((torrent) => (
                 <TorrentRow key={torrent.hash} torrent={torrent} showAge />
