@@ -126,11 +126,11 @@ export async function POST(req: Request) {
 
     const aiStart = performance.now()
     console.log(
-      `🤖 [parse-tv-shows:ai] Sending ${filenames.length} item(s) to Groq (llama-3.3-70b-versatile, ${exampleMessages.length} few-shot turns)...`
+      `🤖 [parse-tv-shows:ai] Sending ${filenames.length} item(s) to Groq (openai/gpt-oss-20b, ${exampleMessages.length} few-shot turns)...`
     )
 
     const { text, usage } = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
+      model: groq('openai/gpt-oss-20b'),
       system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
       Follow these rules:
       1. Remove all quality indicators (720p, 1080p, 4K, etc.)
