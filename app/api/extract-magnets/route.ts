@@ -41,6 +41,7 @@ async function fetchTextWithTimeout(
 }
 
 export async function POST(request: Request) {
+  const routeStart = performance.now()
   try {
     const { url } = await request.json()
 
@@ -48,10 +49,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
-    console.log('🌐 Fetching URL:', url)
+    console.log(`🌐 [extract-magnets] Fetching root URL: "${url}"`)
+    const fetchStart = performance.now()
     const { contentType, text } = await fetchTextWithTimeout(url)
+    const fetchDurationMs = performance.now() - fetchStart
+    console.log(`📥 [extract-magnets] Fetched URL in ${fetchDurationMs.toFixed(0)}ms (${(text.length / 1024).toFixed(1)} KB, type: "${contentType}")`)
 
     let magnetUrls: string[] = []
+    const parseStart = performance.now()
 
     const trimmed = text.trimStart()
     const hasJsonContentType = contentType.includes('application/json')
@@ -62,25 +67,38 @@ export async function POST(request: Request) {
         const json = JSON.parse(text) as Json
         console.log(
           hasJsonContentType
-            ? '📦 Detected JSON response (via Content-Type)'
-            : '📦 Detected JSON response (via heuristic)'
+            ? '📦 [extract-magnets] Detected JSON response (via Content-Type)'
+            : '📦 [extract-magnets] Detected JSON response (via heuristic)'
         )
         magnetUrls = await handleUserJsonUrl(json)
       } catch {
-        console.log('📄 Treating response as HTML/text')
+        console.log('📄 [extract-magnets] Treating response as HTML/text')
         magnetUrls = await handleUserHtmlUrl(url, text)
       }
     } else {
-      console.log('📄 Treating response as HTML/text')
+      console.log('📄 [extract-magnets] Treating response as HTML/text')
       magnetUrls = await handleUserHtmlUrl(url, text)
     }
 
+    const parseDurationMs = performance.now() - parseStart
     const magnetLinks = parseMagnetLinks(magnetUrls.join('\n'))
-    console.log('🔍 Found magnet links:', magnetLinks.length)
+    const totalDurationMs = performance.now() - routeStart
 
-    return NextResponse.json({ magnetLinks })
+    console.log(
+      `🏁 [extract-magnets] Complete in ${totalDurationMs.toFixed(0)}ms (fetch: ${fetchDurationMs.toFixed(0)}ms, extract: ${parseDurationMs.toFixed(0)}ms) -> Found ${magnetLinks.length} magnet(s)`
+    )
+
+    return NextResponse.json(
+      { magnetLinks },
+      {
+        headers: {
+          'Server-Timing': `fetch;dur=${fetchDurationMs.toFixed(1)}, extract;dur=${parseDurationMs.toFixed(1)}, total;dur=${totalDurationMs.toFixed(1)}`,
+        },
+      }
+    )
   } catch (error) {
-    console.error('❌ Error extracting magnet links:', error)
+    const totalDurationMs = performance.now() - routeStart
+    console.error(`❌ [extract-magnets] Error after ${totalDurationMs.toFixed(0)}ms:`, error)
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to extract magnet links',
@@ -164,6 +182,7 @@ async function extractMagnetLinksFromAllHtmlUrls(
   baseUrl?: string,
   originalHost?: string
 ): Promise<string[]> {
+  const start = performance.now()
   const torrentUrls = urls
     .map((href) => {
       try {
@@ -188,19 +207,23 @@ async function extractMagnetLinksFromAllHtmlUrls(
     })
 
   const uniqueTorrentUrls = [...new Set(torrentUrls)]
-  console.log('🔗 Found potential torrent pages:', uniqueTorrentUrls.length)
+  console.log(`🔗 [extract-magnets] Found ${uniqueTorrentUrls.length} potential torrent subpage URL(s)`)
+
+  if (uniqueTorrentUrls.length === 0) {
+    return []
+  }
 
   const fetchPage = async (url: string): Promise<string | null> => {
+    const pageStart = performance.now()
     try {
-      console.log('📥 Fetching torrent page:', url)
       const { text } = await fetchTextWithTimeout(url)
       const magnets = extractMagnetUrlsFromHtml(text)
-      if (magnets.length > 1) {
-        console.warn('⚠️ Multiple magnet links found on page:', url, magnets.length)
-      }
+      const pageDurationMs = performance.now() - pageStart
+      console.log(`📥 [extract-magnets] Fetched subpage in ${pageDurationMs.toFixed(0)}ms (${magnets.length} magnets): ${url}`)
       return magnets[0] ?? null
     } catch (error) {
-      console.error('❌ Error fetching torrent page:', url, error)
+      const pageDurationMs = performance.now() - pageStart
+      console.error(`❌ [extract-magnets] Error fetching subpage after ${pageDurationMs.toFixed(0)}ms: ${url}`, error)
       return null
     }
   }
@@ -210,7 +233,10 @@ async function extractMagnetLinksFromAllHtmlUrls(
     fetchPage,
     MAX_CONCURRENT_TORRENT_PAGE_FETCHES
   )
-  return results.filter((magnet): magnet is string => magnet !== null)
+  const found = results.filter((magnet): magnet is string => magnet !== null)
+  const totalMs = performance.now() - start
+  console.log(`🔗 [extract-magnets] Scraped ${uniqueTorrentUrls.length} subpage(s) in ${totalMs.toFixed(0)}ms -> found ${found.length} magnet(s)`)
+  return found
 }
 
 async function mapWithConcurrency<T, R>(

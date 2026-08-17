@@ -10,9 +10,9 @@ const hasUpstash =
 
 const redis = hasUpstash
   ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  })
   : null
 
 const CACHE_PREFIX = 'bunch-of-magnets:tv-show-name:'
@@ -123,56 +123,106 @@ const exampleMessages = examples
 
 const cacheKeyFor = (filename: string) => `${CACHE_PREFIX}${filename}`
 
-const readCache = async (filenames: string[]): Promise<Map<string, string>> => {
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+  let timer: NodeJS.Timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timer!)
+  }
+}
+
+type CacheReadResult = {
+  cached: Map<string, string>
+  durationMs: number
+  error?: string
+}
+
+const readCache = async (filenames: string[]): Promise<CacheReadResult> => {
+  const start = performance.now()
   const result = new Map<string, string>()
-  if (!redis || filenames.length === 0) return result
+  if (!redis || filenames.length === 0) {
+    return { cached: result, durationMs: performance.now() - start }
+  }
 
   try {
     const keys = filenames.map(cacheKeyFor)
-    const cached = (await redis.mget<(string | null)[]>(...keys)) ?? []
+    const cached = (await withTimeout(redis.mget<(string | null)[]>(...keys), 2000, 'Redis mget')) ?? []
     cached.forEach((value, idx) => {
       if (typeof value === 'string' && value.length > 0) {
         result.set(filenames[idx], value)
       }
     })
-    if (result.size > 0) {
-      console.log(`💾 Cache hit for ${result.size}/${filenames.length} TV name(s)`)
-    }
+    const durationMs = performance.now() - start
+    console.log(
+      `💾 [parse-tv-shows:cache] Read in ${durationMs.toFixed(1)}ms: ${result.size}/${filenames.length} hit(s)`
+    )
+    return { cached: result, durationMs }
   } catch (error) {
-    console.warn('⚠️ Failed to read TV-show name cache:', error)
+    const durationMs = performance.now() - start
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.warn(`⚠️ [parse-tv-shows:cache] Failed after ${durationMs.toFixed(1)}ms:`, errMsg)
+    return { cached: result, durationMs, error: errMsg }
   }
-  return result
 }
 
 const writeCache = async (entries: Map<string, string>) => {
   if (!redis || entries.size === 0) return
+  const start = performance.now()
   try {
     const pipe = redis.pipeline()
     for (const [filename, name] of entries) {
       pipe.set(cacheKeyFor(filename), name, { ex: CACHE_TTL_SECONDS })
     }
-    await pipe.exec()
+    await withTimeout(pipe.exec(), 3000, 'Redis pipeline')
+    const durationMs = performance.now() - start
+    console.log(`💾 [parse-tv-shows:cache] Saved ${entries.size} entry/entries in ${durationMs.toFixed(1)}ms`)
   } catch (error) {
-    console.warn('⚠️ Failed to write TV-show name cache:', error)
+    const durationMs = performance.now() - start
+    console.warn(`⚠️ [parse-tv-shows:cache] Write failed after ${durationMs.toFixed(1)}ms:`, error)
   }
 }
 
 export async function POST(req: Request) {
+  const routeStart = performance.now()
   try {
     const { filenames } = inputSchema.parse(await req.json())
 
+    console.log(
+      `🎬 [parse-tv-shows] Start request for ${filenames.length} filename(s): ${filenames
+        .slice(0, 3)
+        .map((f) => `"${f}"`)
+        .join(', ')}${filenames.length > 3 ? ` (+${filenames.length - 3} more)` : ''}`
+    )
+
     if (filenames.length === 0) {
-      return new Response(JSON.stringify({ showNames: [] }), {
+      return new Response(JSON.stringify({ showNames: [], metrics: { totalDurationMs: 0 } }), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    const cached = await readCache(filenames)
+    const { cached, durationMs: cacheDurationMs, error: cacheError } = await readCache(filenames)
     const missing = filenames.filter((f) => !cached.has(f))
 
     let freshResults: string[] = []
+    let aiDurationMs = 0
+    let promptTokens = 0
+    let completionTokens = 0
+    let totalTokens = 0
+    let tokensPerSecond: number | null = null
+
     if (missing.length > 0) {
-      const { text } = await generateText({
+      const aiStart = performance.now()
+      console.log(
+        `🤖 [parse-tv-shows:ai] Sending ${missing.length} item(s) to Groq (llama-3.3-70b-versatile, ${exampleMessages.length} few-shot turns)...`
+      )
+
+      const { text, usage } = await generateText({
         model: groq('llama-3.3-70b-versatile'),
         system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
         Follow these rules:
@@ -197,14 +247,28 @@ export async function POST(req: Request) {
         ],
       })
 
+      aiDurationMs = performance.now() - aiStart
+      promptTokens = usage?.promptTokens ?? 0
+      completionTokens = usage?.completionTokens ?? 0
+      totalTokens = usage?.totalTokens ?? (promptTokens + completionTokens)
+      if (completionTokens > 0 && aiDurationMs > 0) {
+        tokensPerSecond = parseFloat((completionTokens / (aiDurationMs / 1000)).toFixed(1))
+      }
+
+      console.log(
+        `✨ [parse-tv-shows:ai] Groq finished in ${aiDurationMs.toFixed(0)}ms | Tokens: ${promptTokens} in / ${completionTokens} out (${tokensPerSecond ?? 'N/A'} tok/s)`
+      )
+
       freshResults = text
         .trimEnd()
         .split('\n')
         .map((s) => s.trim())
 
+      console.log(`📝 [parse-tv-shows:ai] Parsed lines:`, freshResults)
+
       const canIndexSafely = freshResults.length === missing.length
       if (!canIndexSafely) {
-        console.warn('⚠️ TV parser returned unexpected line count:', {
+        console.warn('⚠️ [parse-tv-shows:ai] Returned unexpected line count:', {
           expected: missing.length,
           actual: freshResults.length,
         })
@@ -232,13 +296,52 @@ export async function POST(req: Request) {
       return cached.get(filename) ?? freshByFilename.get(filename) ?? ''
     })
 
-    return new Response(JSON.stringify({ showNames }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const totalDurationMs = performance.now() - routeStart
+    console.log(
+      `🏁 [parse-tv-shows] Finished in ${totalDurationMs.toFixed(0)}ms | Cache: ${cacheDurationMs.toFixed(0)}ms (${cached.size}/${filenames.length} hit) | AI: ${aiDurationMs.toFixed(0)}ms -> ${JSON.stringify(showNames)}`
+    )
+
+    const serverTiming = [
+      `cache;dur=${cacheDurationMs.toFixed(1)}`,
+      `ai;dur=${aiDurationMs.toFixed(1)}`,
+      `total;dur=${totalDurationMs.toFixed(1)}`,
+    ].join(', ')
+
+    return new Response(
+      JSON.stringify({
+        showNames,
+        metrics: {
+          totalDurationMs: Math.round(totalDurationMs),
+          cacheDurationMs: Math.round(cacheDurationMs),
+          cacheHits: cached.size,
+          cacheMisses: missing.length,
+          cacheError: cacheError || null,
+          aiDurationMs: Math.round(aiDurationMs),
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          tokensPerSecond,
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Server-Timing': serverTiming,
+        },
+      }
+    )
   } catch (error) {
-    console.error('🔴 Error parsing TV show names:', error)
-    return new Response(JSON.stringify({ error: 'Failed to parse TV show names' }), {
-      status: 400,
-    })
+    const totalDurationMs = performance.now() - routeStart
+    console.error(`🔴 [parse-tv-shows] Error after ${totalDurationMs.toFixed(0)}ms:`, error)
+    return new Response(
+      JSON.stringify({
+        error: 'Failed to parse TV show names',
+        details: error instanceof Error ? error.message : String(error),
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
   }
 }

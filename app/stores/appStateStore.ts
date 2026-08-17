@@ -48,6 +48,9 @@ const sortSuggestionsByType = () => {
 
 // Helper to update suggestions based on current magnetLinks
 const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink[]) => {
+  const start = performance.now()
+  console.log(`💡 [appState] Updating suggestions for ${magnetLinks.length} magnet link(s)...`)
+
   // Parse show name from first link
   try {
     const showName = await parseFirstTvShowName(magnetLinks)
@@ -60,7 +63,7 @@ const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink
       }
     }
   } catch (error) {
-    console.error('❌ Error parsing show name:', error)
+    console.error('❌ [appState] Error parsing show name:', error)
   }
 
   // Parse seasons from all links
@@ -75,11 +78,15 @@ const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink
       }
     })
   } catch (error) {
-    console.error('❌ Error parsing seasons:', error)
+    console.error('❌ [appState] Error parsing seasons:', error)
   }
 
   // Sort suggestions by type
   sortSuggestionsByType()
+  const duration = performance.now() - start
+  console.log(
+    `💡 [appState] Suggestions updated in ${duration.toFixed(0)}ms (${appStateStore.dynamicSuggestions.length} total suggestion pills)`
+  )
 }
 
 export const appStateActions = {

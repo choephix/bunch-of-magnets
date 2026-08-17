@@ -1,6 +1,8 @@
 import { MagnetLink } from '../utils/magnet'
 
 export async function parseTvShowName(displayName: string): Promise<string> {
+  const start = performance.now()
+  console.log(`📡 [tvShowService] Requesting TV show name for: "${displayName}"`)
   try {
     const response = await fetch('/api/parse-tv-shows', {
       method: 'POST',
@@ -12,14 +14,30 @@ export async function parseTvShowName(displayName: string): Promise<string> {
       }),
     })
 
+    const clientRttMs = performance.now() - start
+
     if (!response.ok) {
+      const errText = await response.text()
+      console.error(`❌ [tvShowService] Server error (${response.status}) in ${clientRttMs.toFixed(0)}ms:`, errText)
       throw new Error('Failed to parse TV show name')
     }
 
     const data = await response.json()
-    return data.showNames[0]
+    const showName = data.showNames?.[0] ?? ''
+    const metrics = data.metrics
+
+    if (metrics) {
+      console.log(
+        `📺 [tvShowService] Resolved "${displayName}" -> "${showName}" in ${clientRttMs.toFixed(0)}ms client RTT (Server: ${metrics.totalDurationMs}ms, Groq AI: ${metrics.aiDurationMs}ms @ ${metrics.tokensPerSecond ?? 'N/A'} tok/s, Cache: ${metrics.cacheDurationMs}ms ${metrics.cacheHits > 0 ? 'HIT' : 'MISS'})`
+      )
+    } else {
+      console.log(`📺 [tvShowService] Resolved "${displayName}" -> "${showName}" in ${clientRttMs.toFixed(0)}ms`)
+    }
+
+    return showName
   } catch (error) {
-    console.error('❌ Error parsing TV show name:', error)
+    const clientRttMs = performance.now() - start
+    console.error(`❌ [tvShowService] Error parsing TV show name after ${clientRttMs.toFixed(0)}ms:`, error)
     throw error
   }
 }
@@ -31,23 +49,30 @@ const isValidMagnetDisplayName = (displayName: string | undefined): boolean => {
 export async function parseFirstTvShowName(
   magnetLinks: readonly MagnetLink[]
 ): Promise<string | null> {
-  for (const link of magnetLinks) {
-    const isValid = isValidMagnetDisplayName(link.displayName)
-    if (!isValid) {
+  const totalStart = performance.now()
+  console.log(`🔍 [tvShowService] Searching show name across ${magnetLinks.length} magnet link(s)...`)
+
+  for (let i = 0; i < magnetLinks.length; i++) {
+    const link = magnetLinks[i]
+    if (!link.displayName || link.displayName.includes('magnet:?')) {
       continue
     }
 
     try {
       const showName = await parseTvShowName(link.displayName)
-      console.log('📺 Parsed TV show name:', showName)
-      return showName
+      if (showName) {
+        const elapsed = performance.now() - totalStart
+        console.log(`✅ [tvShowService] Found show name "${showName}" on link #${i + 1} in ${elapsed.toFixed(0)}ms`)
+        return showName
+      }
     } catch (error) {
-      console.error('❌ Error parsing TV show name:', error)
-      // Continue with the next magnet link if parsing fails
+      console.warn(`⚠️ [tvShowService] Failed link #${i + 1} ("${link.displayName}"), trying next...`, error)
       continue
     }
   }
 
+  const elapsed = performance.now() - totalStart
+  console.log(`⚠️ [tvShowService] No valid show name found across ${magnetLinks.length} link(s) in ${elapsed.toFixed(0)}ms`)
   return null
 }
 
