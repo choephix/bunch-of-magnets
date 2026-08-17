@@ -2,11 +2,9 @@ import { proxy, useSnapshot } from 'valtio'
 import { parseFirstTvShowName, parseSeasons } from '../services/tvShowService'
 import { MagnetLink } from '../utils/magnet'
 import {
-  buildSavePath,
+  applySavePathSuggestion,
   findSavePathTitle,
-  PLACEHOLDER,
-  relativeSegments,
-  SLOT_INDEX,
+  moveSavePathToBase,
 } from '../utils/savePath'
 import { configStore, getActiveDownloader } from './configStore'
 import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
@@ -135,20 +133,12 @@ export const appStateActions = {
   },
 
   applySuggestion: (suggestion: SuggestionPill) => {
-    const targetIndex = SLOT_INDEX[suggestion.type]
-    const relativeParts = relativeSegments(appStateStore.savePath, appStateStore.basePath)
-
-    // Ensure we have enough parts (pad with placeholders)
-    while (relativeParts.length <= targetIndex) {
-      relativeParts.push(PLACEHOLDER)
-    }
-
-    // Update the target part
-    relativeParts[targetIndex] =
-      suggestion.type === 'season' ? `Season ${suggestion.value}` : (suggestion.value as string)
-
-    // Reconstruct the path
-    appStateStore.savePath = buildSavePath(appStateStore.basePath, relativeParts)
+    appStateStore.savePath = applySavePathSuggestion(
+      appStateStore.savePath,
+      appStateStore.basePath,
+      suggestion,
+      Object.keys(getEffectiveLibrarySuggestions())
+    )
     console.log('📁 Updated save path:', appStateStore.savePath)
   },
 
@@ -157,14 +147,13 @@ export const appStateActions = {
   },
 
   setBasePath: (newBasePath: string) => {
-    const relativeParts = relativeSegments(appStateStore.savePath, appStateStore.basePath)
-
-    // Ensure at least one placeholder
-    if (relativeParts.length === 0) relativeParts.push(PLACEHOLDER)
-
     const normalizedBase = newBasePath.replace(/\/+$/, '')
+    appStateStore.savePath = moveSavePathToBase(
+      appStateStore.savePath,
+      appStateStore.basePath,
+      normalizedBase
+    )
     appStateStore.basePath = normalizedBase
-    appStateStore.savePath = buildSavePath(normalizedBase, relativeParts)
     console.log('🗂️ Base path updated:', appStateStore.basePath, '→', appStateStore.savePath)
   },
 
@@ -196,24 +185,26 @@ export const appStateActions = {
 
 export const useAppState = () => useSnapshot(appStateStore)
 
-/** Library folder names enabled for the active downloader */
-const useLibraryNames = () => {
-  useSnapshot(settingsStore) // subscribe to overrides changes
-  useSnapshot(configStore) // subscribe to downloader changes
-
+const getEffectiveLibrarySuggestions = () => {
   const activeDownloader = getActiveDownloader()
-  const effectiveSuggestions = activeDownloader
+  return activeDownloader
     ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
     : {}
+}
 
-  return Object.entries(effectiveSuggestions)
-    .filter(([_, enabled]) => enabled)
-    .map(([name]) => name)
+/** Subscribe to settings that determine the active downloader's library folders. */
+const useEffectiveLibrarySuggestions = () => {
+  useSnapshot(settingsStore)
+  useSnapshot(configStore)
+
+  return getEffectiveLibrarySuggestions()
 }
 
 export const getAllSuggestionsSnapshot = () => {
   const appState = useSnapshot(appStateStore)
-  const librarySuggestions = useLibraryNames().map((value) => ({ type: 'library' as const, value }))
+  const librarySuggestions = Object.entries(useEffectiveLibrarySuggestions())
+    .filter(([_, enabled]) => enabled)
+    .map(([value]) => ({ type: 'library' as const, value }))
 
   return [...librarySuggestions, ...appState.dynamicSuggestions]
 }
@@ -222,5 +213,9 @@ export const getAllSuggestionsSnapshot = () => {
 export const useSavePathTitle = () => {
   const { savePath, basePath } = useSnapshot(appStateStore)
 
-  return findSavePathTitle(savePath, basePath, useLibraryNames())
+  return findSavePathTitle(
+    savePath,
+    basePath,
+    Object.keys(useEffectiveLibrarySuggestions())
+  )
 }
