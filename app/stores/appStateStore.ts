@@ -3,8 +3,12 @@ import { parseFirstTvShowName, parseSeasons } from '../services/tvShowService'
 import { MagnetLink } from '../utils/magnet'
 import {
   applySavePathSuggestion,
-  findSavePathTitle,
+  buildSavePath,
+  canAddTorrents,
+  createSavePathSelection,
+  editSavePathRoot,
   moveSavePathToBase,
+  SavePathSelection,
 } from '../utils/savePath'
 import { configStore, getActiveDownloader } from './configStore'
 import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
@@ -17,15 +21,19 @@ type SuggestionPill = {
 type State = {
   magnetLinks: MagnetLink[]
   dynamicSuggestions: SuggestionPill[]
+  savePathSelection: SavePathSelection
   savePath: string
   basePath: string
   isExtracting: boolean
 }
 
+const initialSelection = createSavePathSelection('')
+
 const initialState: State = {
   magnetLinks: [],
   dynamicSuggestions: [],
-  savePath: '',
+  savePathSelection: initialSelection,
+  savePath: buildSavePath(initialSelection),
   basePath: '',
   isExtracting: false,
 }
@@ -133,27 +141,27 @@ export const appStateActions = {
   },
 
   applySuggestion: (suggestion: SuggestionPill) => {
-    appStateStore.savePath = applySavePathSuggestion(
-      appStateStore.savePath,
-      appStateStore.basePath,
-      suggestion,
-      Object.keys(getEffectiveLibrarySuggestions())
+    appStateStore.savePathSelection = applySavePathSuggestion(
+      appStateStore.savePathSelection,
+      suggestion
     )
+    appStateStore.savePath = buildSavePath(appStateStore.savePathSelection)
     console.log('📁 Updated save path:', appStateStore.savePath)
   },
 
   setSavePath: (path: string) => {
+    appStateStore.savePathSelection = editSavePathRoot(path)
     appStateStore.savePath = path
   },
 
   setBasePath: (newBasePath: string) => {
     const normalizedBase = newBasePath.replace(/\/+$/, '')
-    appStateStore.savePath = moveSavePathToBase(
-      appStateStore.savePath,
-      appStateStore.basePath,
+    appStateStore.savePathSelection = moveSavePathToBase(
+      appStateStore.savePathSelection,
       normalizedBase
     )
     appStateStore.basePath = normalizedBase
+    appStateStore.savePath = buildSavePath(appStateStore.savePathSelection)
     console.log('🗂️ Base path updated:', appStateStore.basePath, '→', appStateStore.savePath)
   },
 
@@ -209,13 +217,14 @@ export const getAllSuggestionsSnapshot = () => {
   return [...librarySuggestions, ...appState.dynamicSuggestions]
 }
 
-/** Show or movie name currently in the save path; empty until the user picks one */
+/** Show or movie name currently selected; empty until the user picks one */
 export const useSavePathTitle = () => {
-  const { savePath, basePath } = useSnapshot(appStateStore)
+  const { savePathSelection } = useSnapshot(appStateStore)
+  return savePathSelection.title ?? ''
+}
 
-  return findSavePathTitle(
-    savePath,
-    basePath,
-    Object.keys(useEffectiveLibrarySuggestions())
-  )
+/** Whether torrents can be added to downloader */
+export const useCanAddTorrents = () => {
+  const { savePathSelection } = useSnapshot(appStateStore)
+  return canAddTorrents(savePathSelection)
 }

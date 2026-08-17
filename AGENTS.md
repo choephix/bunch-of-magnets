@@ -120,8 +120,8 @@ pnpm test     # node:test unit tests (app/**/*.test.ts)
 
 1. User configures save path via suggestions
 2. Selects target downloader (settings)
-3. Add button stays disabled until the save path holds a show/movie name
-   (`findSavePathTitle` in `app/utils/savePath.ts`)
+3. Add button stays disabled until a show/movie name is selected
+   (`canAddTorrents` in `app/utils/savePath.ts`)
 4. `qbittorrent` API authenticates and batch-adds all magnets
 
 ## Notes

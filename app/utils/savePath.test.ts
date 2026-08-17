@@ -3,14 +3,13 @@ import { test } from 'node:test'
 import {
   applySavePathSuggestion,
   buildSavePath,
-  findSavePathTitle,
+  canAddTorrents,
+  createSavePathSelection,
+  editSavePathRoot,
   moveSavePathToBase,
-  relativeSegments,
+  type SavePathSelection,
   type SavePathSuggestion,
 } from './savePath.ts'
-
-const BASE = '/media-library'
-const LIBRARIES = ['movies', 'tv']
 
 const ACTIONS = {
   L: { type: 'library', value: 'tv' },
@@ -20,20 +19,19 @@ const ACTIONS = {
 
 type ActionName = keyof typeof ACTIONS
 
-const applyActions = (names: readonly ActionName[], initialPath = `${BASE}/_/`) =>
-  names.reduce(
-    (path, name) => applySavePathSuggestion(path, BASE, ACTIONS[name], LIBRARIES),
-    initialPath
-  )
+const applyActions = (
+  names: readonly ActionName[],
+  initial: SavePathSelection = createSavePathSelection('/media-library')
+) => names.reduce((sel, name) => applySavePathSuggestion(sel, ACTIONS[name]), initial)
 
-const expectedPath = (names: readonly ActionName[]) => {
+const expectedPath = (names: readonly ActionName[], root = '/media-library') => {
   const selected = new Set(names)
   const segments: string[] = []
   if (selected.has('L')) segments.push('tv')
   if (selected.has('T')) segments.push('Silo')
   else segments.push('_')
   if (selected.has('S')) segments.push('Season 3')
-  return buildSavePath(BASE, segments)
+  return `${root}/${segments.join('/')}/`
 }
 
 const EVERY_SUBSET_AND_ORDER: readonly ActionName[][] = [
@@ -55,131 +53,89 @@ const EVERY_SUBSET_AND_ORDER: readonly ActionName[][] = [
   ['S', 'T', 'L'],
 ]
 
-test('every subset and ordering of library, title, and season clicks produces canonical paths', () => {
+test('every subset and ordering on configured base path produces canonical paths and gating', () => {
   for (const actions of EVERY_SUBSET_AND_ORDER) {
-    assert.equal(applyActions(actions), expectedPath(actions), actions.join(' → ') || 'no clicks')
+    const sel = applyActions(actions)
+    const label = actions.join(' → ') || 'no clicks'
+    assert.equal(buildSavePath(sel), expectedPath(actions), label)
+    assert.equal(canAddTorrents(sel), actions.includes('T'), `canAdd for ${label}`)
   }
 })
 
-test('the reported regression: title then season has no phantom library placeholder', () => {
-  const afterTitle = applyActions(['T'])
-  assert.equal(afterTitle, '/media-library/Silo/')
+test('user edits existing path to /Downloads and clicks Name or Name + Season', () => {
+  // 1. User manually edits path to /Downloads
+  let sel = editSavePathRoot('/Downloads')
+  assert.equal(buildSavePath(sel), '/Downloads/_/')
+  assert.equal(canAddTorrents(sel), false)
 
-  const afterSeason = applySavePathSuggestion(afterTitle, BASE, ACTIONS.S, LIBRARIES)
-  assert.equal(afterSeason, '/media-library/Silo/Season 3/')
+  // 2. User clicks show name 'Silo'
+  sel = applySavePathSuggestion(sel, ACTIONS.T)
+  assert.equal(buildSavePath(sel), '/Downloads/Silo/')
+  assert.equal(canAddTorrents(sel), true)
+
+  // 3. User clicks season '3'
+  sel = applySavePathSuggestion(sel, ACTIONS.S)
+  assert.equal(buildSavePath(sel), '/Downloads/Silo/Season 3/')
+  assert.equal(canAddTorrents(sel), true)
+
+  // 4. Optionally adds library 'tv'
+  sel = applySavePathSuggestion(sel, ACTIONS.L)
+  assert.equal(buildSavePath(sel), '/Downloads/tv/Silo/Season 3/')
+  assert.equal(canAddTorrents(sel), true)
 })
 
-test('missing choices retain exactly one placeholder in the title position', () => {
-  assert.equal(applyActions([]), '/media-library/_/')
-  assert.equal(applyActions(['L']), '/media-library/tv/_/')
-  assert.equal(applyActions(['S']), '/media-library/_/Season 3/')
-  assert.equal(applyActions(['L', 'S']), '/media-library/tv/_/Season 3/')
-  assert.equal(applyActions(['S', 'L']), '/media-library/tv/_/Season 3/')
+test('user edits existing path to /Downloads and clicks Season before Name', () => {
+  let sel = editSavePathRoot('/Downloads')
+
+  // Clicks Season first -> placeholder kept, button remains disabled
+  sel = applySavePathSuggestion(sel, ACTIONS.S)
+  assert.equal(buildSavePath(sel), '/Downloads/_/Season 3/')
+  assert.equal(canAddTorrents(sel), false)
+
+  // Clicks Name next -> placeholder replaced, button enabled
+  sel = applySavePathSuggestion(sel, ACTIONS.T)
+  assert.equal(buildSavePath(sel), '/Downloads/Silo/Season 3/')
+  assert.equal(canAddTorrents(sel), true)
 })
 
-test('later clicks replace their own selection without disturbing the others', () => {
-  let path = applyActions(['L', 'T', 'S'])
+test('editing the root clears previous selections', () => {
+  let sel = applyActions(['L', 'T', 'S'])
+  assert.equal(buildSavePath(sel), '/media-library/tv/Silo/Season 3/')
+  assert.equal(canAddTorrents(sel), true)
 
-  path = applySavePathSuggestion(path, BASE, { type: 'showname', value: 'Andor' }, LIBRARIES)
-  assert.equal(path, '/media-library/tv/Andor/Season 3/')
+  // Manual edit to custom folder
+  sel = editSavePathRoot('/custom/path')
+  assert.equal(buildSavePath(sel), '/custom/path/_/')
+  assert.equal(canAddTorrents(sel), false)
+})
 
-  path = applySavePathSuggestion(path, BASE, { type: 'library', value: 'movies' }, LIBRARIES)
-  assert.equal(path, '/media-library/movies/Andor/Season 3/')
+test('later clicks replace their own selection without disturbing others', () => {
+  let sel = applyActions(['L', 'T', 'S'])
 
-  path = applySavePathSuggestion(path, BASE, { type: 'season', value: 1 }, LIBRARIES)
-  assert.equal(path, '/media-library/movies/Andor/Season 1/')
+  sel = applySavePathSuggestion(sel, { type: 'showname', value: 'Severance' })
+  assert.equal(buildSavePath(sel), '/media-library/tv/Severance/Season 3/')
+
+  sel = applySavePathSuggestion(sel, { type: 'library', value: 'movies' })
+  assert.equal(buildSavePath(sel), '/media-library/movies/Severance/Season 3/')
+
+  sel = applySavePathSuggestion(sel, { type: 'season', value: 1 })
+  assert.equal(buildSavePath(sel), '/media-library/movies/Severance/Season 1/')
 })
 
 test('repeating any selected suggestion is idempotent', () => {
-  const canonical = applyActions(['L', 'T', 'S'])
-  assert.equal(applySavePathSuggestion(canonical, BASE, ACTIONS.L, LIBRARIES), canonical)
-  assert.equal(applySavePathSuggestion(canonical, BASE, ACTIONS.T, LIBRARIES), canonical)
-  assert.equal(applySavePathSuggestion(canonical, BASE, ACTIONS.S, LIBRARIES), canonical)
+  const sel = applyActions(['L', 'T', 'S'])
+  const initialPath = buildSavePath(sel)
+
+  assert.equal(buildSavePath(applySavePathSuggestion(sel, ACTIONS.L)), initialPath)
+  assert.equal(buildSavePath(applySavePathSuggestion(sel, ACTIONS.T)), initialPath)
+  assert.equal(buildSavePath(applySavePathSuggestion(sel, ACTIONS.S)), initialPath)
 })
 
-test('suggestion clicks complete valid manually edited paths', () => {
-  assert.equal(
-    applySavePathSuggestion('/media-library/Silo/', BASE, ACTIONS.S, LIBRARIES),
-    '/media-library/Silo/Season 3/'
-  )
-  assert.equal(
-    applySavePathSuggestion('/media-library/tv/Silo/', BASE, ACTIONS.S, LIBRARIES),
-    '/media-library/tv/Silo/Season 3/'
-  )
-  assert.equal(
-    applySavePathSuggestion('/media-library/_/Season 3/', BASE, ACTIONS.T, LIBRARIES),
-    '/media-library/Silo/Season 3/'
-  )
-  assert.equal(
-    applySavePathSuggestion('/media-library/tv/Season 3/', BASE, ACTIONS.T, LIBRARIES),
-    '/media-library/tv/Silo/Season 3/'
-  )
-})
+test('downloader changes update base path while preserving selections', () => {
+  const sel = applyActions(['L', 'T', 'S'])
+  assert.equal(buildSavePath(sel), '/media-library/tv/Silo/Season 3/')
 
-test('a path produced by the broken implementation is repaired by the next click', () => {
-  const broken = '/media-library/_/Silo/Season 3/'
-  assert.equal(
-    applySavePathSuggestion(broken, BASE, ACTIONS.S, LIBRARIES),
-    '/media-library/Silo/Season 3/'
-  )
-  assert.equal(
-    applySavePathSuggestion(broken, BASE, { type: 'showname', value: 'Andor' }, LIBRARIES),
-    '/media-library/Andor/Season 3/'
-  )
-  assert.equal(
-    applySavePathSuggestion(broken, BASE, ACTIONS.L, LIBRARIES),
-    '/media-library/tv/Silo/Season 3/'
-  )
-})
-
-test('base-path initialization and downloader changes preserve the relative destination', () => {
-  assert.equal(moveSavePathToBase('', '', '/media-library/'), '/media-library/_/')
-  assert.equal(
-    moveSavePathToBase('/downloads/tv/Silo/Season 3/', '/downloads/', '/media-library/'),
-    '/media-library/tv/Silo/Season 3/'
-  )
-  assert.equal(
-    moveSavePathToBase('/downloads/_/Season 3/', '/downloads', '/media-library'),
-    '/media-library/_/Season 3/'
-  )
-})
-
-test('base-path matching respects path-segment boundaries', () => {
-  assert.deepEqual(relativeSegments('/downloads/tv/Silo/', '/downloads'), ['tv', 'Silo'])
-  assert.deepEqual(relativeSegments('/downloads-old/tv/Silo/', '/downloads'), [
-    'downloads-old',
-    'tv',
-    'Silo',
-  ])
-})
-
-test('submit gating stays disabled until a title is present for every action order', () => {
-  for (const actions of EVERY_SUBSET_AND_ORDER) {
-    const selectedTitle = findSavePathTitle(applyActions(actions), BASE, LIBRARIES)
-    assert.equal(selectedTitle, actions.includes('T') ? 'Silo' : '', actions.join(' → '))
-  }
-})
-
-test('submit gating recognizes manual titles and ignores placeholders, libraries, and seasons', () => {
-  const title = (path: string) => findSavePathTitle(path, BASE, LIBRARIES)
-
-  assert.equal(title(''), '')
-  assert.equal(title('/media-library/'), '')
-  assert.equal(title('/media-library/_/'), '')
-  assert.equal(title('/media-library/tv/'), '')
-  assert.equal(title('/media-library/tv/_/'), '')
-  assert.equal(title('/media-library/_/Season 3/'), '')
-  assert.equal(title('/media-library/tv/Season 3/'), '')
-  assert.equal(title('/media-library/TV/season3/'), '')
-  assert.equal(title('/media-library/Silo/'), 'Silo')
-  assert.equal(title('/media-library/tv/Silo/Season 3/'), 'Silo')
-  assert.equal(title('/media-library/movies/Dune Part Two (2024)/'), 'Dune Part Two (2024)')
-})
-
-test('titles resembling numbers or ordinary season phrases are not mistaken for season folders', () => {
-  assert.equal(findSavePathTitle('/media-library/tv/1923/', BASE, LIBRARIES), '1923')
-  assert.equal(
-    findSavePathTitle('/media-library/movies/Season of the Witch/', BASE, LIBRARIES),
-    'Season of the Witch'
-  )
+  const moved = moveSavePathToBase(sel, '/var/torrents/completed')
+  assert.equal(buildSavePath(moved), '/var/torrents/completed/tv/Silo/Season 3/')
+  assert.equal(canAddTorrents(moved), true)
 })

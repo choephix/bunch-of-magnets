@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useProcessMagnetLinkQueries } from '../hooks/useMagnetQuery'
-import { appStateActions, useAppState, useSavePathTitle } from '../stores/appStateStore'
+import { appStateActions, useAppState, useCanAddTorrents } from '../stores/appStateStore'
 import { queryHistoryActions } from '../stores/queryHistoryStore'
 import { debounce } from '../utils/magnet'
 import { HistoryModal } from './HistoryModal'
@@ -15,7 +15,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
   const [magnetInput, setMagnetInput] = useState('')
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const { magnetLinks, isExtracting } = useAppState()
-  const savePathTitle = useSavePathTitle()
+  const canAdd = useCanAddTorrents()
 
   const { error, processMagnetLinkQueries } = useProcessMagnetLinkQueries()
 
@@ -39,7 +39,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
   )
 
   const handleSubmit = async (e: React.FormEvent) => {
-    if (!savePathTitle) return
+    if (!canAdd) return
     await onSubmit(e)
     queryHistoryActions.saveCandidateToHistory()
   }
@@ -63,9 +63,8 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
             onChange={(e) => handleMagnetInput(e.target.value)}
             onDoubleClick={() => setIsHistoryOpen(true)}
             disabled={isExtracting}
-            className={`w-full h-14 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none p-3 ${
-              isExtracting ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            className={`w-full h-14 bg-transparent font-mono text-xs text-gray-100 focus:outline-none focus:ring-0 focus:border-0 transition-all resize-none p-3 ${isExtracting ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             placeholder="Paste magnet link here (magnet:?xt=...) or a website url with magnet links. Double click to view history."
           />
           {(magnetLinks.length > 0 || isExtracting) && (
@@ -76,9 +75,8 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
                 {magnetLinks.map((item, index) => (
                   <div
                     key={index}
-                    className={`text-xs hover:bg-gray-800 rounded transition-colors flex items-center group cursor-pointer ${
-                      item.ignore ? 'opacity-40' : 'text-gray-200'
-                    }`}
+                    className={`text-xs hover:bg-gray-800 rounded transition-colors flex items-center group cursor-pointer ${item.ignore ? 'opacity-40' : 'text-gray-200'
+                      }`}
                     onClick={() => appStateActions.toggleIgnoreMagnetLink(index)}
                   >
                     <div className="flex-1 min-w-0 flex items-center space-x-2 px-3">
@@ -136,14 +134,14 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
           <button
             type="submit"
             onClick={handleSubmit}
-            disabled={isLoading || !savePathTitle}
-            title={savePathTitle ? undefined : 'Pick a show or movie name first'}
+            disabled={isLoading || !canAdd}
+            title={canAdd ? undefined : 'Pick a show or movie name first'}
             className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-1.5 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 
             disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none 
             cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900
             mt-3"
           >
-            {!savePathTitle
+            {!canAdd
               ? 'Pick a show or movie name'
               : isLoading
                 ? 'Adding...'
