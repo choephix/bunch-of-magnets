@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useProcessMagnetLinkQueries } from '../hooks/useMagnetQuery'
-import { appStateActions, useAppState } from '../stores/appStateStore'
+import { appStateActions, useAppState, useSavePathTitle } from '../stores/appStateStore'
 import { queryHistoryActions } from '../stores/queryHistoryStore'
 import { debounce } from '../utils/magnet'
 import { HistoryModal } from './HistoryModal'
@@ -15,6 +15,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
   const [magnetInput, setMagnetInput] = useState('')
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const { magnetLinks, isExtracting } = useAppState()
+  const savePathTitle = useSavePathTitle()
 
   const { error, processMagnetLinkQueries } = useProcessMagnetLinkQueries()
 
@@ -38,6 +39,7 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
   )
 
   const handleSubmit = async (e: React.FormEvent) => {
+    if (!savePathTitle) return
     await onSubmit(e)
     queryHistoryActions.saveCandidateToHistory()
   }
@@ -134,15 +136,18 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
           <button
             type="submit"
             onClick={handleSubmit}
-            disabled={isLoading}
+            disabled={isLoading || !savePathTitle}
+            title={savePathTitle ? undefined : 'Pick a show or movie name first'}
             className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-1.5 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 
             disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none 
             cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900
             mt-3"
           >
-            {isLoading
-              ? 'Adding...'
-              : `Add ${magnetLinks.filter((m) => !m.ignore).length} Torrents`}
+            {!savePathTitle
+              ? 'Pick a show or movie name'
+              : isLoading
+                ? 'Adding...'
+                : `Add ${magnetLinks.filter((m) => !m.ignore).length} Torrents`}
           </button>
         </>
       )}

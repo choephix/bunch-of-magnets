@@ -14,6 +14,7 @@ const defaultSettings: SettingsState = {
 }
 
 const loadSettings = (): SettingsState => {
+  if (typeof window === 'undefined') return defaultSettings
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
@@ -30,14 +31,16 @@ const loadSettings = (): SettingsState => {
 
 export const settingsStore = proxy<SettingsState>(loadSettings())
 
-// Subscribe to changes and save to localStorage
-subscribe(settingsStore, () => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsStore))
-  } catch (error) {
-    console.error('❌ Failed to save settings:', error)
-  }
-})
+if (typeof window !== 'undefined') {
+  // Subscribe to changes and save to localStorage
+  subscribe(settingsStore, () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsStore))
+    } catch (error) {
+      console.error('❌ Failed to save settings:', error)
+    }
+  })
+}
 
 /** Get effective librarySuggestions for a downloader (overrides merged with defaults) */
 export const getLibrarySuggestionsForDownloader = (

@@ -15,7 +15,7 @@
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 (App Router) + React 19
+- **Cache**: Browser localStorage (settings, query history)
 - **State**: Valtio
 - **Styling**: TailwindCSS 4 + Lucide icons
 - **AI**: AI SDK with Groq, Cerebras, OpenAI providers
@@ -49,7 +49,7 @@ app/
 ├── stores/
 │   ├── appStateStore.ts    # Magnets, suggestions, save path
 │   ├── configStore.ts      # Downloader list
-│   ├── queryHistoryStore.ts # Search history (Redis-backed)
+│   ├── queryHistoryStore.ts # Search history (localStorage)
 │   └── settingsStore.ts    # User prefs (localStorage)
 └── utils/
 middleware.ts            # Auth middleware
@@ -63,8 +63,6 @@ middleware.ts            # Auth middleware
 APP_PASSWORD=your_app_password
 APP_CONFIG_BASE64=<base64 encoded .app.config.json>
 GROQ_API_KEY=your_groq_key
-UPSTASH_REDIS_REST_URL=your_upstash_url
-UPSTASH_REDIS_REST_TOKEN=your_upstash_token
 ```
 
 ### Downloader Config (`.app.config.json`)
@@ -99,6 +97,7 @@ Base64 encode this file and set as `APP_CONFIG_BASE64`. Use `./update-env.sh` he
 ```bash
 pnpm dev      # Turbopack dev server on :3000
 pnpm build    # Production build + type check
+pnpm test     # node:test unit tests (app/**/*.test.ts)
 ```
 
 ## Key Flows
@@ -121,11 +120,13 @@ pnpm build    # Production build + type check
 
 1. User configures save path via suggestions
 2. Selects target downloader (settings)
-3. `qbittorrent` API authenticates and batch-adds all magnets
+3. Add button stays disabled until the save path holds a show/movie name
+   (`findSavePathTitle` in `app/utils/savePath.ts`)
+4. `qbittorrent` API authenticates and batch-adds all magnets
 
 ## Notes
 
-- No test framework configured
+- Unit tests run on node:test (`pnpm test`), no test framework dependency
 - TypeScript strict mode enforced
 - Console logs use emoji prefixes for parsing
 - Prefer named imports, functional/declarative style

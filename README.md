@@ -63,7 +63,6 @@ See [.env.example](./.env.example) for the full list. Briefly:
 - `APP_PASSWORD` - login password
 - `APP_CONFIG_BASE64` - base64-encoded `.app.config.json`
 - `GROQ_API_KEY` - for AI show-name parsing
-- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` - optional Redis storage
 
 ### Development
 

@@ -1,6 +1,13 @@
 import { proxy, useSnapshot } from 'valtio'
 import { parseFirstTvShowName, parseSeasons } from '../services/tvShowService'
 import { MagnetLink } from '../utils/magnet'
+import {
+  buildSavePath,
+  findSavePathTitle,
+  PLACEHOLDER,
+  relativeSegments,
+  SLOT_INDEX,
+} from '../utils/savePath'
 import { configStore, getActiveDownloader } from './configStore'
 import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
 
@@ -27,19 +34,6 @@ const initialState: State = {
 
 export const appStateStore = proxy<State>(initialState)
 
-/** Get the relative path after basePath */
-const getRelativePath = () => {
-  const { savePath, basePath } = appStateStore
-  if (!basePath || !savePath.startsWith(basePath)) return savePath
-  return savePath.slice(basePath.length)
-}
-
-/** Build full path from basePath + relative parts */
-const buildFullPath = (basePath: string, relativeParts: string[]) => {
-  const base = basePath.replace(/\/+$/, '')
-  return `${base}/${relativeParts.join('/')}/`
-}
-
 // Helper to sort suggestions by type (library, then show, then season)
 const sortSuggestionsByType = () => {
   const typeOrder = { library: 0, showname: 1, season: 2 }
@@ -51,41 +45,50 @@ const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink
   const start = performance.now()
   console.log(`💡 [appState] Updating suggestions for ${magnetLinks.length} magnet link(s)...`)
 
-  // Parse show name from first link
-  try {
-    const showName = await parseFirstTvShowName(magnetLinks)
-    if (showName) {
-      const newSuggestion = { type: 'showname' as const, value: showName }
-      if (
-        !appStateStore.dynamicSuggestions.some((s) => s.type === 'showname' && s.value === showName)
-      ) {
-        appStateStore.dynamicSuggestions.push(newSuggestion)
-      }
-    }
-  } catch (error) {
-    console.error('❌ [appState] Error parsing show name:', error)
-  }
-
-  // Parse seasons from all links
+  // 1. Immediately parse and display season pills synchronously (0ms)
   try {
     const seasons = parseSeasons(magnetLinks)
+    let addedSeason = false
     seasons.forEach((season) => {
       const newSuggestion = { type: 'season' as const, value: season }
       if (
         !appStateStore.dynamicSuggestions.some((s) => s.type === 'season' && s.value === season)
       ) {
         appStateStore.dynamicSuggestions.push(newSuggestion)
+        addedSeason = true
       }
     })
+    if (addedSeason) {
+      sortSuggestionsByType()
+      console.log(
+        `⚡ [appState] Instant season pills rendered in ${(performance.now() - start).toFixed(1)}ms`
+      )
+    }
   } catch (error) {
     console.error('❌ [appState] Error parsing seasons:', error)
   }
 
-  // Sort suggestions by type
-  sortSuggestionsByType()
+  // 2. Fetch show name from AI in background
+  try {
+    const showName = await parseFirstTvShowName(magnetLinks)
+    if (showName) {
+      const newSuggestion = { type: 'showname' as const, value: showName }
+      if (
+        !appStateStore.dynamicSuggestions.some(
+          (s) => s.type === 'showname' && s.value === showName
+        )
+      ) {
+        appStateStore.dynamicSuggestions.push(newSuggestion)
+        sortSuggestionsByType()
+      }
+    }
+  } catch (error) {
+    console.error('❌ [appState] Error parsing show name:', error)
+  }
+
   const duration = performance.now() - start
   console.log(
-    `💡 [appState] Suggestions updated in ${duration.toFixed(0)}ms (${appStateStore.dynamicSuggestions.length} total suggestion pills)`
+    `💡 [appState] Suggestions fully updated in ${duration.toFixed(0)}ms (${appStateStore.dynamicSuggestions.length} total suggestion pills)`
   )
 }
 
@@ -132,25 +135,12 @@ export const appStateActions = {
   },
 
   applySuggestion: (suggestion: SuggestionPill) => {
-    // Get relative parts after basePath
-    const relativePath = getRelativePath()
-    const relativeParts = relativePath.split('/').filter(Boolean)
+    const targetIndex = SLOT_INDEX[suggestion.type]
+    const relativeParts = relativeSegments(appStateStore.savePath, appStateStore.basePath)
 
-    // Target indices relative to basePath: library=0, showname=1, season=2
-    const targetIndex =
-      suggestion.type === 'library'
-        ? 0
-        : suggestion.type === 'showname'
-          ? 1
-          : suggestion.type === 'season'
-            ? 2
-            : -1
-
-    if (targetIndex === -1) return
-
-    // Ensure we have enough parts (pad with "_")
+    // Ensure we have enough parts (pad with placeholders)
     while (relativeParts.length <= targetIndex) {
-      relativeParts.push('_')
+      relativeParts.push(PLACEHOLDER)
     }
 
     // Update the target part
@@ -158,7 +148,7 @@ export const appStateActions = {
       suggestion.type === 'season' ? `Season ${suggestion.value}` : (suggestion.value as string)
 
     // Reconstruct the path
-    appStateStore.savePath = buildFullPath(appStateStore.basePath, relativeParts)
+    appStateStore.savePath = buildSavePath(appStateStore.basePath, relativeParts)
     console.log('📁 Updated save path:', appStateStore.savePath)
   },
 
@@ -167,15 +157,14 @@ export const appStateActions = {
   },
 
   setBasePath: (newBasePath: string) => {
-    const relativePath = getRelativePath()
-    const relativeParts = relativePath.split('/').filter(Boolean)
+    const relativeParts = relativeSegments(appStateStore.savePath, appStateStore.basePath)
 
     // Ensure at least one placeholder
-    if (relativeParts.length === 0) relativeParts.push('_')
+    if (relativeParts.length === 0) relativeParts.push(PLACEHOLDER)
 
     const normalizedBase = newBasePath.replace(/\/+$/, '')
     appStateStore.basePath = normalizedBase
-    appStateStore.savePath = buildFullPath(normalizedBase, relativeParts)
+    appStateStore.savePath = buildSavePath(normalizedBase, relativeParts)
     console.log('🗂️ Base path updated:', appStateStore.basePath, '→', appStateStore.savePath)
   },
 
@@ -207,8 +196,8 @@ export const appStateActions = {
 
 export const useAppState = () => useSnapshot(appStateStore)
 
-export const getAllSuggestionsSnapshot = () => {
-  const appState = useSnapshot(appStateStore)
+/** Library folder names enabled for the active downloader */
+const useLibraryNames = () => {
   useSnapshot(settingsStore) // subscribe to overrides changes
   useSnapshot(configStore) // subscribe to downloader changes
 
@@ -217,9 +206,21 @@ export const getAllSuggestionsSnapshot = () => {
     ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
     : {}
 
-  const librarySuggestions = Object.entries(effectiveSuggestions)
+  return Object.entries(effectiveSuggestions)
     .filter(([_, enabled]) => enabled)
-    .map(([type]) => ({ type: 'library' as const, value: type }))
+    .map(([name]) => name)
+}
+
+export const getAllSuggestionsSnapshot = () => {
+  const appState = useSnapshot(appStateStore)
+  const librarySuggestions = useLibraryNames().map((value) => ({ type: 'library' as const, value }))
 
   return [...librarySuggestions, ...appState.dynamicSuggestions]
+}
+
+/** Show or movie name currently in the save path; empty until the user picks one */
+export const useSavePathTitle = () => {
+  const { savePath, basePath } = useSnapshot(appStateStore)
+
+  return findSavePathTitle(savePath, basePath, useLibraryNames())
 }

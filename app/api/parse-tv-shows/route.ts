@@ -1,27 +1,12 @@
 import { createGroq } from '@ai-sdk/groq'
 import { generateText, Message } from 'ai'
-import { Redis } from '@upstash/redis'
 import { z } from 'zod'
 
 const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
-const hasUpstash =
-  !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN
-
-const redis = hasUpstash
-  ? new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
-  : null
-
-const CACHE_PREFIX = 'bunch-of-magnets:tv-show-name:'
-const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
-
 const inputSchema = z.object({
   filenames: z.array(z.string()),
 })
-
 const examples = `
 Input: "The.Mandalorian.S03E01.1080p.WEB-DL.DDP5.1.H.264-NTb.mkv"
 Output: "The Mandalorian"
@@ -121,73 +106,6 @@ const exampleMessages = examples
   })
   .filter(Boolean) as Message[]
 
-const cacheKeyFor = (filename: string) => `${CACHE_PREFIX}${filename}`
-
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
-  let timer: NodeJS.Timeout
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-  })
-  try {
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    clearTimeout(timer!)
-  }
-}
-
-type CacheReadResult = {
-  cached: Map<string, string>
-  durationMs: number
-  error?: string
-}
-
-const readCache = async (filenames: string[]): Promise<CacheReadResult> => {
-  const start = performance.now()
-  const result = new Map<string, string>()
-  if (!redis || filenames.length === 0) {
-    return { cached: result, durationMs: performance.now() - start }
-  }
-
-  try {
-    const keys = filenames.map(cacheKeyFor)
-    const cached = (await withTimeout(redis.mget<(string | null)[]>(...keys), 2000, 'Redis mget')) ?? []
-    cached.forEach((value, idx) => {
-      if (typeof value === 'string' && value.length > 0) {
-        result.set(filenames[idx], value)
-      }
-    })
-    const durationMs = performance.now() - start
-    console.log(
-      `💾 [parse-tv-shows:cache] Read in ${durationMs.toFixed(1)}ms: ${result.size}/${filenames.length} hit(s)`
-    )
-    return { cached: result, durationMs }
-  } catch (error) {
-    const durationMs = performance.now() - start
-    const errMsg = error instanceof Error ? error.message : String(error)
-    console.warn(`⚠️ [parse-tv-shows:cache] Failed after ${durationMs.toFixed(1)}ms:`, errMsg)
-    return { cached: result, durationMs, error: errMsg }
-  }
-}
-
-const writeCache = async (entries: Map<string, string>) => {
-  if (!redis || entries.size === 0) return
-  const start = performance.now()
-  try {
-    const pipe = redis.pipeline()
-    for (const [filename, name] of entries) {
-      pipe.set(cacheKeyFor(filename), name, { ex: CACHE_TTL_SECONDS })
-    }
-    await withTimeout(pipe.exec(), 3000, 'Redis pipeline')
-    const durationMs = performance.now() - start
-    console.log(`💾 [parse-tv-shows:cache] Saved ${entries.size} entry/entries in ${durationMs.toFixed(1)}ms`)
-  } catch (error) {
-    const durationMs = performance.now() - start
-    console.warn(`⚠️ [parse-tv-shows:cache] Write failed after ${durationMs.toFixed(1)}ms:`, error)
-  }
-}
-
 export async function POST(req: Request) {
   const routeStart = performance.now()
   try {
@@ -206,103 +124,69 @@ export async function POST(req: Request) {
       })
     }
 
-    const { cached, durationMs: cacheDurationMs, error: cacheError } = await readCache(filenames)
-    const missing = filenames.filter((f) => !cached.has(f))
+    const aiStart = performance.now()
+    console.log(
+      `🤖 [parse-tv-shows:ai] Sending ${filenames.length} item(s) to Groq (llama-3.3-70b-versatile, ${exampleMessages.length} few-shot turns)...`
+    )
 
-    let freshResults: string[] = []
-    let aiDurationMs = 0
-    let promptTokens = 0
-    let completionTokens = 0
-    let totalTokens = 0
+    const { text, usage } = await generateText({
+      model: groq('llama-3.3-70b-versatile'),
+      system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
+      Follow these rules:
+      1. Remove all quality indicators (720p, 1080p, 4K, etc.)
+      2. Remove all season/episode information (S01E01, S1E1, etc.)
+      3. Remove all release group names and tags
+      4. Remove all file extensions
+      5. Keep only the main show name
+      6. Return the show name in a clean, standardized format
+      7. Overall use your intuition to determine the correct show name
+      8. Replace colons etc with dashes, to ensure valid folder name for the show
+      9. Output exactly one show name per input line, in the same order, with no extra commentary
+
+      Small note: Sometimes it may be a movie. That's fine. Just return the name.
+      `,
+      messages: [
+        ...exampleMessages,
+        {
+          role: 'user',
+          content: filenames.join('\n'),
+        },
+      ],
+    })
+
+    const aiDurationMs = performance.now() - aiStart
+    const promptTokens = usage?.promptTokens ?? 0
+    const completionTokens = usage?.completionTokens ?? 0
+    const totalTokens = usage?.totalTokens ?? (promptTokens + completionTokens)
     let tokensPerSecond: number | null = null
-
-    if (missing.length > 0) {
-      const aiStart = performance.now()
-      console.log(
-        `🤖 [parse-tv-shows:ai] Sending ${missing.length} item(s) to Groq (llama-3.3-70b-versatile, ${exampleMessages.length} few-shot turns)...`
-      )
-
-      const { text, usage } = await generateText({
-        model: groq('llama-3.3-70b-versatile'),
-        system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
-        Follow these rules:
-        1. Remove all quality indicators (720p, 1080p, 4K, etc.)
-        2. Remove all season/episode information (S01E01, S1E1, etc.)
-        3. Remove all release group names and tags
-        4. Remove all file extensions
-        5. Keep only the main show name
-        6. Return the show name in a clean, standardized format
-        7. Overall use your intuition to determine the correct show name
-        8. Replace colons etc with dashes, to ensure valid folder name for the show
-        9. Output exactly one show name per input line, in the same order, with no extra commentary
-
-        Small note: Sometimes it may be a movie. That's fine. Just return the name.
-        `,
-        messages: [
-          ...exampleMessages,
-          {
-            role: 'user',
-            content: missing.join('\n'),
-          },
-        ],
-      })
-
-      aiDurationMs = performance.now() - aiStart
-      promptTokens = usage?.promptTokens ?? 0
-      completionTokens = usage?.completionTokens ?? 0
-      totalTokens = usage?.totalTokens ?? (promptTokens + completionTokens)
-      if (completionTokens > 0 && aiDurationMs > 0) {
-        tokensPerSecond = parseFloat((completionTokens / (aiDurationMs / 1000)).toFixed(1))
-      }
-
-      console.log(
-        `✨ [parse-tv-shows:ai] Groq finished in ${aiDurationMs.toFixed(0)}ms | Tokens: ${promptTokens} in / ${completionTokens} out (${tokensPerSecond ?? 'N/A'} tok/s)`
-      )
-
-      freshResults = text
-        .trimEnd()
-        .split('\n')
-        .map((s) => s.trim())
-
-      console.log(`📝 [parse-tv-shows:ai] Parsed lines:`, freshResults)
-
-      const canIndexSafely = freshResults.length === missing.length
-      if (!canIndexSafely) {
-        console.warn('⚠️ [parse-tv-shows:ai] Returned unexpected line count:', {
-          expected: missing.length,
-          actual: freshResults.length,
-        })
-      }
-
-      // Only cache when model output can be safely paired with input lines.
-      const toCache = new Map<string, string>()
-      if (canIndexSafely) {
-        missing.forEach((filename, idx) => {
-          const value = freshResults[idx]
-          if (value) toCache.set(filename, value)
-        })
-      }
-      void writeCache(toCache)
+    if (completionTokens > 0 && aiDurationMs > 0) {
+      tokensPerSecond = parseFloat((completionTokens / (aiDurationMs / 1000)).toFixed(1))
     }
 
-    // Reconstruct response in original input order.
-    const freshByFilename = new Map<string, string>()
-    missing.forEach((filename, idx) => {
-      const value = freshResults[idx]
-      if (value) freshByFilename.set(filename, value)
-    })
+    console.log(
+      `✨ [parse-tv-shows:ai] Groq finished in ${aiDurationMs.toFixed(0)}ms | Tokens: ${promptTokens} in / ${completionTokens} out (${tokensPerSecond ?? 'N/A'} tok/s)`
+    )
 
-    const showNames = filenames.map((filename) => {
-      return cached.get(filename) ?? freshByFilename.get(filename) ?? ''
-    })
+    const showNames = text
+      .trimEnd()
+      .split('\n')
+      .map((s) => s.trim())
+
+    console.log(`📝 [parse-tv-shows:ai] Parsed lines:`, showNames)
+
+    if (showNames.length !== filenames.length) {
+      console.warn('⚠️ [parse-tv-shows:ai] Returned unexpected line count:', {
+        expected: filenames.length,
+        actual: showNames.length,
+      })
+    }
 
     const totalDurationMs = performance.now() - routeStart
     console.log(
-      `🏁 [parse-tv-shows] Finished in ${totalDurationMs.toFixed(0)}ms | Cache: ${cacheDurationMs.toFixed(0)}ms (${cached.size}/${filenames.length} hit) | AI: ${aiDurationMs.toFixed(0)}ms -> ${JSON.stringify(showNames)}`
+      `🏁 [parse-tv-shows] Finished in ${totalDurationMs.toFixed(0)}ms | AI: ${aiDurationMs.toFixed(0)}ms -> ${JSON.stringify(showNames)}`
     )
 
     const serverTiming = [
-      `cache;dur=${cacheDurationMs.toFixed(1)}`,
       `ai;dur=${aiDurationMs.toFixed(1)}`,
       `total;dur=${totalDurationMs.toFixed(1)}`,
     ].join(', ')
@@ -312,10 +196,6 @@ export async function POST(req: Request) {
         showNames,
         metrics: {
           totalDurationMs: Math.round(totalDurationMs),
-          cacheDurationMs: Math.round(cacheDurationMs),
-          cacheHits: cached.size,
-          cacheMisses: missing.length,
-          cacheError: cacheError || null,
           aiDurationMs: Math.round(aiDurationMs),
           promptTokens,
           completionTokens,

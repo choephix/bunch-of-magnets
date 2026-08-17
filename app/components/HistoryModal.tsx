@@ -14,13 +14,13 @@ export function HistoryModal({
   const { history, isLoading } = useSnapshot(queryHistoryStore)
   const [queryToDelete, setQueryToDelete] = useState<string | null>(null)
 
-  const handleDelete = async (query: string) => {
+  const handleDelete = (query: string) => {
     setQueryToDelete(query)
   }
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (queryToDelete) {
-      await queryHistoryActions.removeFromHistory(queryToDelete)
+      queryHistoryActions.removeFromHistory(queryToDelete)
       setQueryToDelete(null)
     }
   }
