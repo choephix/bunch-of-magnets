@@ -7,6 +7,7 @@ import { SaveDir } from './components/SaveDir'
 import { SettingsModal } from './components/SettingsModal'
 import { StatusMessage } from './components/StatusMessage'
 import { SuggestionPills } from './components/SuggestionPills'
+import { ToastContainer } from './components/ToastContainer'
 import { TorrentProgressPanel } from './components/TorrentProgress'
 import { useMagnetSubmission } from './hooks/useMagnetSubmission'
 import { useAppState } from './stores/appStateStore'
@@ -50,6 +51,8 @@ export default function Home() {
 
         <TorrentProgressPanel hashes={trackedHashes} downloaderName={downloaderName} />
       </main>
+
+      <ToastContainer />
     </div>
   )
 }

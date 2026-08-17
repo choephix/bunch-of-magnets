@@ -12,6 +12,7 @@ import {
 } from '../utils/savePath'
 import { configStore, getActiveDownloader } from './configStore'
 import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
+import { toast } from './toastStore'
 
 type SuggestionPill = {
   type: 'showname' | 'season' | 'library'
@@ -90,6 +91,11 @@ const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink
     }
   } catch (error) {
     console.error('❌ [appState] Error parsing show name:', error)
+    // `parseFirstTvShowName` already toasts per-request API failures; anything that
+    // escapes it is unexpected, so surface it rather than failing silently.
+    toast.error(
+      `Could not determine show name: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
 
   const duration = performance.now() - start

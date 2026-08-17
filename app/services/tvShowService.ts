@@ -1,10 +1,50 @@
+import { toast } from '../stores/toastStore'
 import { MagnetLink } from '../utils/magnet'
+
+/**
+ * Pulls the most descriptive message out of an error response: the API returns
+ * `{ error, details }`, upstream AI SDK failures can surface `{ error: { message } }`,
+ * and proxies may return plain text.
+ */
+const extractErrorMessage = async (response: Response): Promise<string> => {
+  const raw = await response.text()
+  const fallback = raw.trim() || `HTTP ${response.status}`
+
+  let payload: unknown
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    return fallback
+  }
+  if (!payload || typeof payload !== 'object') return fallback
+
+  let summary = ''
+  if ('error' in payload) {
+    const error = payload.error
+    if (typeof error === 'string') {
+      summary = error
+    } else if (error && typeof error === 'object' && 'message' in error) {
+      if (typeof error.message === 'string') summary = error.message
+    }
+  }
+  if (!summary && 'message' in payload && typeof payload.message === 'string') {
+    summary = payload.message
+  }
+
+  const details =
+    'details' in payload && typeof payload.details === 'string' ? payload.details : ''
+
+  if (summary && details && !summary.includes(details)) return `${summary} (${details})`
+  return summary || details || fallback
+}
 
 export async function parseTvShowName(displayName: string): Promise<string> {
   const start = performance.now()
   console.log(`📡 [tvShowService] Requesting TV show name for: "${displayName}"`)
+
+  let response: Response
   try {
-    const response = await fetch('/api/parse-tv-shows', {
+    response = await fetch('/api/parse-tv-shows', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -13,15 +53,29 @@ export async function parseTvShowName(displayName: string): Promise<string> {
         filenames: [displayName],
       }),
     })
-
+  } catch (error) {
     const clientRttMs = performance.now() - start
+    console.error(
+      `❌ [tvShowService] Network error after ${clientRttMs.toFixed(0)}ms:`,
+      error
+    )
+    toast.error('Network error while parsing TV show name')
+    throw error
+  }
 
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error(`❌ [tvShowService] Server error (${response.status}) in ${clientRttMs.toFixed(0)}ms:`, errText)
-      throw new Error('Failed to parse TV show name')
-    }
+  const clientRttMs = performance.now() - start
 
+  if (!response.ok) {
+    const errorMessage = await extractErrorMessage(response)
+    console.error(
+      `❌ [tvShowService] Server error (${response.status}) in ${clientRttMs.toFixed(0)}ms:`,
+      errorMessage
+    )
+    toast.error(`AI Parsing failed: ${errorMessage}`)
+    throw new Error(`AI parsing failed (${response.status}): ${errorMessage}`)
+  }
+
+  try {
     const data = await response.json()
     const showName = data.showNames?.[0] ?? ''
     const metrics = data.metrics
@@ -36,8 +90,8 @@ export async function parseTvShowName(displayName: string): Promise<string> {
 
     return showName
   } catch (error) {
-    const clientRttMs = performance.now() - start
-    console.error(`❌ [tvShowService] Error parsing TV show name after ${clientRttMs.toFixed(0)}ms:`, error)
+    console.error(`❌ [tvShowService] Malformed response from /api/parse-tv-shows:`, error)
+    toast.error('AI Parsing failed: malformed response from server')
     throw error
   }
 }
