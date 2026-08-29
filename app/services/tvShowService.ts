@@ -38,9 +38,9 @@ const extractErrorMessage = async (response: Response): Promise<string> => {
   return summary || details || fallback
 }
 
-export async function parseTvShowName(displayName: string): Promise<string> {
+export async function parseTvShowNames(filenames: string[]): Promise<string[]> {
   const start = performance.now()
-  console.log(`📡 [tvShowService] Requesting TV show name for: "${displayName}"`)
+  console.log(`📡 [tvShowService] Requesting TV show names for ${filenames.length} filename(s)`)
 
   let response: Response
   try {
@@ -49,16 +49,11 @@ export async function parseTvShowName(displayName: string): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        filenames: [displayName],
-      }),
+      body: JSON.stringify({ filenames }),
     })
   } catch (error) {
     const clientRttMs = performance.now() - start
-    console.error(
-      `❌ [tvShowService] Network error after ${clientRttMs.toFixed(0)}ms:`,
-      error
-    )
+    console.error(`❌ [tvShowService] Network error after ${clientRttMs.toFixed(0)}ms:`, error)
     toast.error('Network error while parsing TV show name')
     throw error
   }
@@ -77,18 +72,20 @@ export async function parseTvShowName(displayName: string): Promise<string> {
 
   try {
     const data = await response.json()
-    const showName = data.showNames?.[0] ?? ''
+    const showNames: string[] = Array.isArray(data.showNames) ? data.showNames : []
     const metrics = data.metrics
 
     if (metrics) {
       console.log(
-        `📺 [tvShowService] Resolved "${displayName}" -> "${showName}" in ${clientRttMs.toFixed(0)}ms client RTT (Server: ${metrics.totalDurationMs}ms, Groq AI: ${metrics.aiDurationMs}ms @ ${metrics.tokensPerSecond ?? 'N/A'} tok/s, Cache: ${metrics.cacheDurationMs}ms ${metrics.cacheHits > 0 ? 'HIT' : 'MISS'})`
+        `📺 [tvShowService] Resolved ${filenames.length} name(s) in ${clientRttMs.toFixed(0)}ms client RTT (Server: ${metrics.totalDurationMs}ms, Groq AI: ${metrics.aiDurationMs}ms @ ${metrics.tokensPerSecond ?? 'N/A'} tok/s, cacheHits: ${metrics.cacheHits ?? 0})`
       )
     } else {
-      console.log(`📺 [tvShowService] Resolved "${displayName}" -> "${showName}" in ${clientRttMs.toFixed(0)}ms`)
+      console.log(
+        `📺 [tvShowService] Resolved ${filenames.length} name(s) in ${clientRttMs.toFixed(0)}ms`
+      )
     }
 
-    return showName
+    return showNames
   } catch (error) {
     console.error(`❌ [tvShowService] Malformed response from /api/parse-tv-shows:`, error)
     toast.error('AI Parsing failed: malformed response from server')
@@ -96,37 +93,34 @@ export async function parseTvShowName(displayName: string): Promise<string> {
   }
 }
 
-const isValidMagnetDisplayName = (displayName: string | undefined): boolean => {
-  return !!displayName && !displayName.includes('magnet:?')
-}
-
 export async function parseFirstTvShowName(
   magnetLinks: readonly MagnetLink[]
 ): Promise<string | null> {
   const totalStart = performance.now()
-  console.log(`🔍 [tvShowService] Searching show name across ${magnetLinks.length} magnet link(s)...`)
+  const filenames = magnetLinks
+    .map((link) => link.displayName)
+    .filter((name): name is string => Boolean(name) && !name.includes('magnet:?'))
 
-  for (let i = 0; i < magnetLinks.length; i++) {
-    const link = magnetLinks[i]
-    if (!link.displayName || link.displayName.includes('magnet:?')) {
-      continue
-    }
-
-    try {
-      const showName = await parseTvShowName(link.displayName)
-      if (showName) {
-        const elapsed = performance.now() - totalStart
-        console.log(`✅ [tvShowService] Found show name "${showName}" on link #${i + 1} in ${elapsed.toFixed(0)}ms`)
-        return showName
-      }
-    } catch (error) {
-      console.warn(`⚠️ [tvShowService] Failed link #${i + 1} ("${link.displayName}"), trying next...`, error)
-      continue
-    }
+  if (filenames.length === 0) {
+    return null
   }
 
+  console.log(
+    `🔍 [tvShowService] Searching show name across ${filenames.length} magnet display name(s)...`
+  )
+
+  const showNames = await parseTvShowNames(filenames)
+  const showName = showNames.find((name) => Boolean(name && name.trim()))
   const elapsed = performance.now() - totalStart
-  console.log(`⚠️ [tvShowService] No valid show name found across ${magnetLinks.length} link(s) in ${elapsed.toFixed(0)}ms`)
+
+  if (showName) {
+    console.log(`✅ [tvShowService] Found show name "${showName}" in ${elapsed.toFixed(0)}ms`)
+    return showName
+  }
+
+  console.log(
+    `⚠️ [tvShowService] No valid show name found across ${filenames.length} name(s) in ${elapsed.toFixed(0)}ms`
+  )
   return null
 }
 

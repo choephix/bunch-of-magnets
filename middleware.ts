@@ -1,40 +1,34 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { AUTH_COOKIE, isValidSessionToken } from './app/lib/session'
 
-// This function can be marked `async` if using `await` inside
-export function middleware(request: NextRequest) {
-  // Get the pathname of the request (e.g. /, /login, /api/...)
+const PUBLIC_PATHS: Record<string, true> = {
+  '/login': true,
+  '/api/auth/login': true,
+  '/api/auth/logout': true,
+  '/api/auth/check': true,
+}
+
+export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
-
-  // Allow access to login page and API routes
-  if (path === '/login' || path.startsWith('/api/')) {
+  if (PUBLIC_PATHS[path]) {
     return NextResponse.next()
   }
 
-  // Check for auth cookie
-  const authCookie = request.cookies.get('auth')
-  const isAuthenticated = authCookie?.value === 'true'
-
-  // If not authenticated and not on login page, redirect to login
-  if (!isAuthenticated) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('from', path)
-    return NextResponse.redirect(loginUrl)
+  const token = request.cookies.get(AUTH_COOKIE)?.value
+  if (await isValidSessionToken(token)) {
+    return NextResponse.next()
   }
 
-  return NextResponse.next()
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('from', path)
+  return NextResponse.redirect(loginUrl)
 }
 
-// Configure which routes to run middleware on
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }

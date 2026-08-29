@@ -1,23 +1,38 @@
 import { NextResponse } from 'next/server'
-
-const CORRECT_PASSWORD = process.env.APP_PASSWORD
+import {
+  AUTH_COOKIE,
+  SESSION_MAX_AGE_SECONDS,
+  createSessionToken,
+  getAppPassword,
+  passwordsMatch,
+} from '@/app/lib/session'
 
 export async function POST(request: Request) {
   try {
-    const { password } = await request.json()
+    const configured = getAppPassword()
+    if (!configured) {
+      console.error('❌ APP_PASSWORD is not set')
+      return NextResponse.json({ error: 'Server is not configured' }, { status: 500 })
+    }
 
-    if (password !== CORRECT_PASSWORD) {
+    const body: unknown = await request.json()
+    const password =
+      body && typeof body === 'object' && 'password' in body && typeof body.password === 'string'
+        ? body.password
+        : null
+
+    if (!password || !passwordsMatch(password, configured)) {
       console.error('❌ Invalid login attempt')
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
     }
 
-    // Set auth cookie
     const response = NextResponse.json({ success: true })
-    response.cookies.set('auth', 'true', {
+    response.cookies.set(AUTH_COOKIE, await createSessionToken(configured), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      path: '/',
     })
 
     console.log('🔐 Successful login')

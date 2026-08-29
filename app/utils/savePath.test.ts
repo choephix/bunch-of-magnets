@@ -5,6 +5,7 @@ import {
   buildSavePath,
   canAddTorrents,
   createSavePathSelection,
+  deriveCategory,
   editSavePathRoot,
   moveSavePathToBase,
   type SavePathSelection,
@@ -138,4 +139,15 @@ test('downloader changes update base path while preserving selections', () => {
   const moved = moveSavePathToBase(sel, '/var/torrents/completed')
   assert.equal(buildSavePath(moved), '/var/torrents/completed/tv/Silo/Season 3/')
   assert.equal(canAddTorrents(moved), true)
+})
+
+test('deriveCategory uses the selected library rather than reparsing the path', () => {
+  const withLibrary = applyActions(['L', 'T'])
+  assert.equal(deriveCategory(withLibrary), 'tv')
+
+  const titleOnly = applyActions(['T'])
+  assert.equal(deriveCategory(titleOnly), '')
+
+  const customRoot = editSavePathRoot('/Downloads/Something')
+  assert.equal(deriveCategory(customRoot), '')
 })

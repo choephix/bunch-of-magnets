@@ -3,23 +3,14 @@ import { MagnetLink, extractInfoHash, parseTags } from '../utils/magnet'
 import { addTorrents } from '../services/qbittorrentService'
 import { appStateActions, appStateStore } from '../stores/appStateStore'
 import { getActiveDownloader } from '../stores/configStore'
-
-const deriveCategory = (savePath: string, basePath: string): string => {
-  let relativePath = savePath
-  if (basePath && savePath.startsWith(basePath)) {
-    relativePath = savePath.slice(basePath.length)
-  }
-  const segments = relativePath.split('/').filter(Boolean)
-  const firstMeaningful = segments.find((s) => s !== '_')
-  return firstMeaningful || ''
-}
+import { deriveCategory } from '../utils/savePath'
 
 interface UseMagnetSubmissionResult {
   isLoading: boolean
   status: { type: 'success' | 'error'; message: string } | null
   trackedHashes: string[]
   downloaderName: string | undefined
-  submitMagnetLinks: (magnetLinks: MagnetLink[], savePath: string) => Promise<void>
+  submitMagnetLinks: (magnetLinks: MagnetLink[], savePath: string) => Promise<boolean>
 }
 
 export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
@@ -42,7 +33,7 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
         .flatMap((link) => parseTags(link.displayName))
         .filter((tag, index, arr) => arr.indexOf(tag) === index)
 
-      const category = deriveCategory(savePath, appStateStore.basePath)
+      const category = deriveCategory(appStateStore.savePathSelection)
 
       const addedHashes = await addTorrents(
         selectedLinks,
@@ -61,14 +52,15 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
 
       setTrackedHashes(hashes)
       setDownloaderName(activeDownloader?.name)
-
       appStateActions.clearMagnetLinks()
+      return true
     } catch (error) {
       console.error('❌ Error:', error)
       setStatus({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to add torrents',
       })
+      return false
     } finally {
       setIsLoading(false)
     }

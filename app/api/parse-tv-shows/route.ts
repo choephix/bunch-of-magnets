@@ -1,12 +1,26 @@
 import { createGroq } from '@ai-sdk/groq'
 import { generateText, Message } from 'ai'
-import { z } from 'zod'
+import { NextResponse } from 'next/server'
+import { z, ZodError } from 'zod'
+import { unauthorizedIfAnonymous } from '@/app/lib/requireAuth'
 
 const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
 const inputSchema = z.object({
   filenames: z.array(z.string()),
 })
+
+const SHOW_NAME_CACHE_LIMIT = 256
+const showNameCache = new Map<string, string>()
+
+const cacheSet = (filename: string, showName: string) => {
+  if (showNameCache.has(filename)) showNameCache.delete(filename)
+  showNameCache.set(filename, showName)
+  if (showNameCache.size > SHOW_NAME_CACHE_LIMIT) {
+    const oldest = showNameCache.keys().next().value
+    if (oldest !== undefined) showNameCache.delete(oldest)
+  }
+}
 const examples = `
 Input: "The.Mandalorian.S03E01.1080p.WEB-DL.DDP5.1.H.264-NTb.mkv"
 Output: "The Mandalorian"
@@ -107,6 +121,9 @@ const exampleMessages = examples
   .filter(Boolean) as Message[]
 
 export async function POST(req: Request) {
+  const unauthorized = await unauthorizedIfAnonymous()
+  if (unauthorized) return unauthorized
+
   const routeStart = performance.now()
   try {
     const { filenames } = inputSchema.parse(await req.json())
@@ -119,19 +136,31 @@ export async function POST(req: Request) {
     )
 
     if (filenames.length === 0) {
-      return new Response(JSON.stringify({ showNames: [], metrics: { totalDurationMs: 0 } }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return NextResponse.json({ showNames: [], metrics: { totalDurationMs: 0, cacheHits: 0 } })
     }
 
-    const aiStart = performance.now()
-    console.log(
-      `🤖 [parse-tv-shows:ai] Sending ${filenames.length} item(s) to Groq (openai/gpt-oss-20b, ${exampleMessages.length} few-shot turns)...`
-    )
+    const showNames = filenames.map((filename) => showNameCache.get(filename) ?? null)
+    const uncachedIndexes = filenames
+      .map((filename, index) => (showNames[index] == null ? index : -1))
+      .filter((index) => index >= 0)
+    const cacheHits = filenames.length - uncachedIndexes.length
 
-    const { text, usage } = await generateText({
-      model: groq('openai/gpt-oss-20b'),
-      system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
+    let aiDurationMs = 0
+    let promptTokens = 0
+    let completionTokens = 0
+    let totalTokens = 0
+    let tokensPerSecond: number | null = null
+
+    if (uncachedIndexes.length > 0) {
+      const uncachedFilenames = uncachedIndexes.map((index) => filenames[index])
+      const aiStart = performance.now()
+      console.log(
+        `🤖 [parse-tv-shows:ai] Sending ${uncachedFilenames.length} item(s) to Groq (openai/gpt-oss-20b, ${exampleMessages.length} few-shot turns, ${cacheHits} cache hit(s))...`
+      )
+
+      const { text, usage } = await generateText({
+        model: groq('openai/gpt-oss-20b'),
+        system: `You are a TV show name parser. Your task is to extract the full TV show name from torrent filenames.
       Follow these rules:
       1. Remove all quality indicators (720p, 1080p, 4K, etc.)
       2. Remove all season/episode information (S01E01, S1E1, etc.)
@@ -145,83 +174,81 @@ export async function POST(req: Request) {
 
       Small note: Sometimes it may be a movie. That's fine. Just return the name.
       `,
-      messages: [
-        ...exampleMessages,
-        {
-          role: 'user',
-          content: filenames.join('\n'),
-        },
-      ],
-    })
+        messages: [
+          ...exampleMessages,
+          {
+            role: 'user',
+            content: uncachedFilenames.join('\n'),
+          },
+        ],
+      })
 
-    const aiDurationMs = performance.now() - aiStart
-    const promptTokens = usage?.promptTokens ?? 0
-    const completionTokens = usage?.completionTokens ?? 0
-    const totalTokens = usage?.totalTokens ?? (promptTokens + completionTokens)
-    let tokensPerSecond: number | null = null
-    if (completionTokens > 0 && aiDurationMs > 0) {
-      tokensPerSecond = parseFloat((completionTokens / (aiDurationMs / 1000)).toFixed(1))
-    }
+      aiDurationMs = performance.now() - aiStart
+      promptTokens = usage?.promptTokens ?? 0
+      completionTokens = usage?.completionTokens ?? 0
+      totalTokens = usage?.totalTokens ?? promptTokens + completionTokens
+      if (completionTokens > 0 && aiDurationMs > 0) {
+        tokensPerSecond = parseFloat((completionTokens / (aiDurationMs / 1000)).toFixed(1))
+      }
 
-    console.log(
-      `✨ [parse-tv-shows:ai] Groq finished in ${aiDurationMs.toFixed(0)}ms | Tokens: ${promptTokens} in / ${completionTokens} out (${tokensPerSecond ?? 'N/A'} tok/s)`
-    )
+      console.log(
+        `✨ [parse-tv-shows:ai] Groq finished in ${aiDurationMs.toFixed(0)}ms | Tokens: ${promptTokens} in / ${completionTokens} out (${tokensPerSecond ?? 'N/A'} tok/s)`
+      )
 
-    const showNames = text
-      .trimEnd()
-      .split('\n')
-      .map((s) => s.trim())
+      const parsedLines = text
+        .trimEnd()
+        .split('\n')
+        .map((line) => line.trim())
 
-    console.log(`📝 [parse-tv-shows:ai] Parsed lines:`, showNames)
+      if (parsedLines.length !== uncachedFilenames.length) {
+        console.warn('⚠️ [parse-tv-shows:ai] Returned unexpected line count:', {
+          expected: uncachedFilenames.length,
+          actual: parsedLines.length,
+        })
+      }
 
-    if (showNames.length !== filenames.length) {
-      console.warn('⚠️ [parse-tv-shows:ai] Returned unexpected line count:', {
-        expected: filenames.length,
-        actual: showNames.length,
+      uncachedIndexes.forEach((filenameIndex, parsedIndex) => {
+        const showName = parsedLines[parsedIndex] ?? ''
+        showNames[filenameIndex] = showName
+        if (showName) cacheSet(filenames[filenameIndex], showName)
       })
     }
 
+    const resolvedShowNames = showNames.map((name) => name ?? '')
     const totalDurationMs = performance.now() - routeStart
     console.log(
-      `🏁 [parse-tv-shows] Finished in ${totalDurationMs.toFixed(0)}ms | AI: ${aiDurationMs.toFixed(0)}ms -> ${JSON.stringify(showNames)}`
+      `🏁 [parse-tv-shows] Finished in ${totalDurationMs.toFixed(0)}ms | AI: ${aiDurationMs.toFixed(0)}ms | cacheHits: ${cacheHits} -> ${JSON.stringify(resolvedShowNames)}`
     )
 
-    const serverTiming = [
-      `ai;dur=${aiDurationMs.toFixed(1)}`,
-      `total;dur=${totalDurationMs.toFixed(1)}`,
-    ].join(', ')
-
-    return new Response(
-      JSON.stringify({
-        showNames,
+    return NextResponse.json(
+      {
+        showNames: resolvedShowNames,
         metrics: {
           totalDurationMs: Math.round(totalDurationMs),
           aiDurationMs: Math.round(aiDurationMs),
+          cacheHits,
           promptTokens,
           completionTokens,
           totalTokens,
           tokensPerSecond,
         },
-      }),
+      },
       {
         headers: {
-          'Content-Type': 'application/json',
-          'Server-Timing': serverTiming,
+          'Server-Timing': `ai;dur=${aiDurationMs.toFixed(1)}, total;dur=${totalDurationMs.toFixed(1)}`,
         },
       }
     )
   } catch (error) {
     const totalDurationMs = performance.now() - routeStart
     console.error(`🔴 [parse-tv-shows] Error after ${totalDurationMs.toFixed(0)}ms:`, error)
-    return new Response(
-      JSON.stringify({
+    const status = error instanceof ZodError ? 400 : 500
+    return NextResponse.json(
+      {
         error: 'Failed to parse TV show names',
         details: error instanceof Error ? error.message : String(error),
-      }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      },
+      { status }
     )
   }
 }

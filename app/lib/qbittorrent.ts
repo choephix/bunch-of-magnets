@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { DownloaderConfig } from './appConfig'
 
 export const stripTrailingSlash = (url: string) => url.replace(/\/+$/, '')

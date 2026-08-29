@@ -11,8 +11,8 @@ Live at [bunch-of-magnets.vercel.app](https://bunch-of-magnets.vercel.app)
 - Automatic tag detection from torrent display names
 - AI-powered TV show name parsing for tidy folder organization
 - Multi-downloader support (select between configured clients)
-- Query history persisted in Upstash Redis
-- Password-protected access (httpOnly cookie, 7-day session)
+- Query history persisted in browser localStorage
+- Password-protected access (signed httpOnly cookie, 7-day session)
 
 ## For Users
 
@@ -54,7 +54,6 @@ Live at [bunch-of-magnets.vercel.app](https://bunch-of-magnets.vercel.app)
    ```
 
 5. Encode it into `APP_CONFIG_BASE64` via `./scripts/update-env.sh`
-6. (Optional) provision an Upstash Redis instance for history + AI caching
 
 ### Environment Variables
 
@@ -75,8 +74,7 @@ pnpm build    # production build (also runs type check)
 
 - Next.js 16 (App Router) + React 19
 - Valtio for state, TailwindCSS 4, Lucide icons
-- AI SDK (Groq / Cerebras / OpenAI)
-- Upstash Redis
+- AI SDK with Groq
 - Zod for validation
 - Vercel for deployment
 

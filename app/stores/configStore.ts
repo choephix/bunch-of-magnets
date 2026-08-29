@@ -1,6 +1,5 @@
 import { proxy } from 'valtio'
-import { fetchConfig, PublicDownloader } from '../services/configService'
-import { appStateActions } from './appStateStore'
+import { fetchConfig, type PublicDownloader } from '../services/configService'
 import { settingsStore } from './settingsStore'
 
 interface ConfigState {
@@ -8,12 +7,10 @@ interface ConfigState {
   isLoading: boolean
 }
 
-const initialState: ConfigState = {
+export const configStore = proxy<ConfigState>({
   downloaders: [],
   isLoading: true,
-}
-
-export const configStore = proxy<ConfigState>(initialState)
+})
 
 /** Get the active downloader (selected or first available) */
 export const getActiveDownloader = (): PublicDownloader | null => {
@@ -22,7 +19,7 @@ export const getActiveDownloader = (): PublicDownloader | null => {
 
   const selected = settingsStore.selectedDownloader
   if (selected) {
-    const found = downloaders.find((d) => d.name === selected)
+    const found = downloaders.find((item) => item.name === selected)
     if (found) return found
   }
   return downloaders[0]
@@ -35,24 +32,10 @@ export const configActions = {
       const config = await fetchConfig()
       configStore.downloaders = config.downloaders
       console.log(`✅ Config loaded: ${config.downloaders.length} downloader(s)`)
-
-      // Initialize basePath from active downloader
-      const active = getActiveDownloader()
-      if (active?.basePath) {
-        appStateActions.setBasePath(active.basePath)
-      }
     } catch (error) {
       console.error('❌ Failed to load config:', error)
     } finally {
       configStore.isLoading = false
-    }
-  },
-
-  /** Call when selected downloader changes to update basePath */
-  updateBasePath: () => {
-    const active = getActiveDownloader()
-    if (active?.basePath) {
-      appStateActions.setBasePath(active.basePath)
     }
   },
 }

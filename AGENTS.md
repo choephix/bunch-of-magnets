@@ -10,16 +10,15 @@
 - Smart extraction from URLs, HTML, JSON, forum posts
 - AI-powered TV show name parsing for folder organization
 - Multi-downloader support (select from configured clients)
-- Query history persistence (Upstash Redis)
-- Password-protected access (7-day sessions)
+- Query history persistence (browser localStorage)
+- Password-protected access (signed 7-day sessions)
 
 ## Tech Stack
 
 - **Cache**: Browser localStorage (settings, query history)
 - **State**: Valtio
 - **Styling**: TailwindCSS 4 + Lucide icons
-- **AI**: AI SDK with Groq, Cerebras, OpenAI providers
-- **Cache**: Upstash Redis (history, AI results)
+- **AI**: AI SDK with Groq
 - **Validation**: Zod
 
 ## Project Structure
@@ -31,28 +30,22 @@ app/
 │   ├── config           # Public downloader list
 │   ├── extract-magnets  # URL scraping for magnets
 │   ├── parse-tv-shows   # AI show name parsing
-│   ├── qbittorrent      # Add torrents to client
-│   └── query-history    # Persist search history
+│   └── qbittorrent      # Add torrents / progress
 ├── components/
-│   ├── HistoryModal.tsx
-│   ├── MagnetExtractionLoader.tsx
-│   ├── MagnetLinks.tsx
-│   ├── NavButtons.tsx
-│   ├── QbittorrentLink.tsx
-│   ├── SaveDir.tsx
-│   ├── SettingsModal.tsx
-│   ├── StatusMessage.tsx
-│   └── SuggestionPills.tsx
 ├── lib/
-│   └── appConfig.ts     # Multi-downloader config loader
-├── services/            # API clients
+│   ├── appConfig.ts     # Multi-downloader config loader
+│   ├── contracts.ts     # Shared public wire schemas
+│   ├── downloader.ts    # Protocol dispatch (qBittorrent)
+│   ├── session.ts       # Signed auth cookie
+│   └── ssrf.ts          # Outbound URL allowlisting
+├── services/            # Browser API clients
 ├── stores/
 │   ├── appStateStore.ts    # Magnets, suggestions, save path
 │   ├── configStore.ts      # Downloader list
 │   ├── queryHistoryStore.ts # Search history (localStorage)
 │   └── settingsStore.ts    # User prefs (localStorage)
 └── utils/
-middleware.ts            # Auth middleware
+middleware.ts            # Auth for pages and API
 ```
 
 ## Configuration
@@ -75,20 +68,24 @@ GROQ_API_KEY=your_groq_key
       "url": "https://...",
       "username": "...",
       "password": "...",
-      "type": "qbittorrent"
+      "type": "qbittorrent",
+      "basePath": "/downloads/",
+      "librarySuggestions": { "movies": true, "tv": true }
     },
     {
       "name": "my-transmission",
       "url": "https://...",
       "username": "...",
       "password": "...",
-      "type": "transmission"
+      "type": "transmission",
+      "basePath": "/downloads/",
+      "librarySuggestions": { "movies": true, "tv": true }
     }
   ]
 }
 ```
 
-Base64 encode this file and set as `APP_CONFIG_BASE64`. Use `./update-env.sh` helper.
+Base64 encode this file and set as `APP_CONFIG_BASE64`. Use `./scripts/update-env.sh` helper.
 
 **Note**: Transmission support stubbed but not yet implemented (returns 501).
 

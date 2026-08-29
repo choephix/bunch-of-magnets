@@ -1,9 +1,26 @@
-import { useCallback } from 'react'
-import { appStateActions } from '../stores/appStateStore'
-import { getAllSuggestionsSnapshot } from '../stores/appStateStore'
+import { useSnapshot } from 'valtio'
+import { appStateActions, appStateStore } from '../stores/appStateStore'
+import { configStore, getActiveDownloader } from '../stores/configStore'
+import { getLibrarySuggestionsForDownloader, settingsStore } from '../stores/settingsStore'
+
+const useAllSuggestions = () => {
+  const appState = useSnapshot(appStateStore)
+  useSnapshot(settingsStore)
+  useSnapshot(configStore)
+
+  const activeDownloader = getActiveDownloader()
+  const librarySuggestions = activeDownloader
+    ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
+    : {}
+  const library = Object.entries(librarySuggestions)
+    .filter(([, enabled]) => enabled)
+    .map(([value]) => ({ type: 'library' as const, value }))
+
+  return [...library, ...appState.dynamicSuggestions]
+}
 
 export const SuggestionPills = () => {
-  const suggestions = getAllSuggestionsSnapshot()
+  const suggestions = useAllSuggestions()
 
   if (suggestions.length === 0) return null
 

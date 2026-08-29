@@ -1,106 +1,45 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
-import {
-  fetchWithTimeout,
-  stripTrailingSlash,
-  withQbittorrentSession,
-} from '@/app/lib/qbittorrent'
-import { extractInfoHash } from '@/app/utils/magnet'
+import { addTorrentsRequestSchema } from '@/app/lib/contracts'
+import { addTorrentsToDownloader, DownloaderNotSupportedError } from '@/app/lib/downloader'
+import { unauthorizedIfAnonymous } from '@/app/lib/requireAuth'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  try {
-    const { magnetLinks, savePath, category, tags, downloaderName } = await request.json()
+  const unauthorized = await unauthorizedIfAnonymous()
+  if (unauthorized) return unauthorized
 
-    if (!Array.isArray(magnetLinks) || !savePath) {
+  try {
+    const parsed = addTorrentsRequestSchema.safeParse(await request.json())
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid request data' }, { status: 400 })
     }
 
+    const { magnetLinks, savePath, category, tags, downloaderName } = parsed.data
     const downloader = downloaderName ? getDownloaderByName(downloaderName) : getDefaultDownloader()
 
-    if (downloader.type === 'transmission') {
-      return NextResponse.json(
-        { error: 'Transmission support not implemented yet' },
-        { status: 501 }
-      )
-    }
-
-    const allMagnetLinks = magnetLinks.join('\n')
-    console.log('📥 Adding torrent(s) with URLs:', allMagnetLinks)
+    console.log('📥 Adding torrent(s) with URLs:', magnetLinks.join('\n'))
     console.log('📁 Using save path:', savePath)
     console.log('🏷️ Using category:', category)
     console.log('🏷️ Using tags:', tags)
     console.log('🖥️ Using downloader:', downloader.name)
 
-    const bodyDict: Record<string, string> = {
-      urls: allMagnetLinks,
-      savepath: savePath,
-      autoTMM: 'false',
-      tags: Array.isArray(tags) ? tags.join(',') : '',
-    }
-    if (typeof category === 'string' && category.length > 0) {
-      bodyDict.category = category
-    }
-
-    const addBase = stripTrailingSlash(downloader.url)
-
-    const addResult = await withQbittorrentSession(downloader, async (cookie) => {
-      const headers = {
-        Cookie: cookie,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      }
-
-      const addTorrents = async (params: Record<string, string>) => {
-        const body = new URLSearchParams(params)
-        console.log('🔍 Body:', body.toString())
-
-        const response = await fetchWithTimeout(`${addBase}/api/v2/torrents/add`, {
-          method: 'POST',
-          headers,
-          body,
-        })
-
-        return {
-          ok: response.ok,
-          status: response.status,
-          text: await response.text(),
-        }
-      }
-
-      let result = await addTorrents(bodyDict)
-
-      if (!result.ok || result.text.startsWith('Fail')) {
-        if (bodyDict.category) {
-          console.warn(
-            '⚠️ qBittorrent rejected category, retrying without category:',
-            bodyDict.category
-          )
-          const { category: _, ...bodyWithoutCategory } = bodyDict
-          result = await addTorrents(bodyWithoutCategory)
-        }
-      }
-
-      if (result.status === 401 || result.status === 403) {
-        throw new Error(`qBittorrent returned ${result.status}`)
-      }
-
-      return result
-    })
-
-    if (!addResult.ok || addResult.text.startsWith('Fail')) {
-      console.error('❌ qBittorrent API error:', addResult.text)
+    const result = await addTorrentsToDownloader(downloader, parsed.data)
+    if (!result.ok) {
+      console.error('❌ qBittorrent API error:', result.error)
       return NextResponse.json({
-        results: [{ success: false, error: addResult.text || 'qBittorrent rejected request' }],
+        results: [{ success: false, error: result.error || 'qBittorrent rejected request' }],
       })
     }
 
     return NextResponse.json({
-      results: [{ success: true, data: addResult.text }],
-      hashes: magnetLinks
-        .map((url: string) => extractInfoHash(url))
-        .filter((hash: string | null): hash is string => Boolean(hash)),
+      results: [{ success: true }],
+      hashes: result.hashes,
     })
   } catch (error) {
     console.error('❌ API Error:', error)
+    if (error instanceof DownloaderNotSupportedError) {
+      return NextResponse.json({ error: error.message }, { status: 501 })
+    }
     const message = error instanceof Error ? error.message : 'Internal server error'
     const timedOut = /timed out/i.test(message)
     return NextResponse.json({ error: message }, { status: timedOut ? 504 : 500 })

@@ -11,7 +11,7 @@ export function HistoryModal({
   onClose: () => void
   onSelect: (query: string) => void
 }) {
-  const { history, isLoading } = useSnapshot(queryHistoryStore)
+  const { history } = useSnapshot(queryHistoryStore)
   const [queryToDelete, setQueryToDelete] = useState<string | null>(null)
 
   const handleDelete = (query: string) => {
@@ -38,9 +38,7 @@ export function HistoryModal({
               </button>
             </div>
             <div className="space-y-1">
-              {isLoading ? (
-                <p className="text-gray-400 text-xs">Loading history...</p>
-              ) : history.length === 0 ? (
+              {history.length === 0 ? (
                 <p className="text-gray-400 text-xs">No history yet</p>
               ) : (
                 history.map((query, index) => (

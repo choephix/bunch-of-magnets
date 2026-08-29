@@ -1,22 +1,16 @@
+import {
+  addTorrentsResponseSchema,
+  torrentProgressResponseSchema,
+  type TorrentProgress,
+} from '@/app/lib/contracts'
 import { extractInfoHash, MagnetLink } from '../utils/magnet'
 
-export type TorrentProgress = {
-  hash: string
-  name: string
-  progress: number
-  state: string
-  dlspeed: number
-  eta: number
-  size: number
-  numSeeds: number
-  numPeers: number
-  addedOn: number
-}
+export type { TorrentProgress }
 
-const readJsonOrThrow = async (response: Response): Promise<Record<string, unknown>> => {
+const readJsonOrThrow = async (response: Response): Promise<unknown> => {
   const text = await response.text()
   try {
-    return text ? (JSON.parse(text) as Record<string, unknown>) : {}
+    return text ? JSON.parse(text) : {}
   } catch {
     const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 160)
     throw new Error(
@@ -35,40 +29,34 @@ export async function addTorrents(
   tags: string[],
   downloaderName?: string
 ): Promise<string[]> {
-  try {
-    const response = await fetch('/api/qbittorrent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        magnetLinks: magnetLinks.map((link) => link.magnetUrl),
-        savePath,
-        category,
-        tags,
-        downloaderName,
-      }),
-    })
+  const response = await fetch('/api/qbittorrent', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      magnetLinks: magnetLinks.map((link) => link.magnetUrl),
+      savePath,
+      category,
+      tags,
+      downloaderName,
+    }),
+  })
 
-    const data = await readJsonOrThrow(response)
+  const data = addTorrentsResponseSchema.parse(await readJsonOrThrow(response))
 
-    if (!response.ok || !(data.results as Array<{ success?: boolean }> | undefined)?.[0]?.success) {
-      const first = (data.results as Array<{ error?: string }> | undefined)?.[0]
-      throw new Error(first?.error || (data.error as string) || 'Failed to add torrents')
-    }
+  if (!response.ok || !data.results[0]?.success) {
+    throw new Error(data.results[0]?.error || data.error || 'Failed to add torrents')
+  }
 
-    const hashes: string[] = Array.isArray(data.hashes) ? (data.hashes as string[]) : []
-    console.log('✅ Added all torrents successfully:', hashes.length, 'hashes')
+  const hashes = data.hashes ?? []
+  console.log('✅ Added all torrents successfully:', hashes.length, 'hashes')
 
-    return hashes.length
-      ? hashes
-      : magnetLinks
+  return hashes.length
+    ? hashes
+    : magnetLinks
         .map((link) => extractInfoHash(link.magnetUrl))
         .filter((hash): hash is string => Boolean(hash))
-  } catch (error) {
-    console.error('❌ Error adding torrents:', error)
-    throw error
-  }
 }
 
 /** Fetches live stats for the given hashes plus, optionally, the N most recently added torrents. */
@@ -87,14 +75,14 @@ export async function fetchTorrentProgress(
   const response = await fetch(`/api/qbittorrent/progress?${params.toString()}`, {
     cache: 'no-store',
   })
-  const data = await readJsonOrThrow(response)
+  const data = torrentProgressResponseSchema.parse(await readJsonOrThrow(response))
 
   if (!response.ok) {
-    throw new Error((data.error as string) || 'Failed to fetch torrent progress')
+    throw new Error(data.error || 'Failed to fetch torrent progress')
   }
 
   return {
-    torrents: (data.torrents ?? []) as TorrentProgress[],
-    recent: (data.recent ?? []) as TorrentProgress[],
+    torrents: data.torrents ?? [],
+    recent: data.recent ?? [],
   }
 }

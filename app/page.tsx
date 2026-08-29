@@ -10,9 +10,9 @@ import { SuggestionPills } from './components/SuggestionPills'
 import { ToastContainer } from './components/ToastContainer'
 import { TorrentProgressPanel } from './components/TorrentProgress'
 import { useMagnetSubmission } from './hooks/useMagnetSubmission'
-import { useAppState } from './stores/appStateStore'
+import { useAppState, appStateActions } from './stores/appStateStore'
 import { useProcessMagnetLinkQueries } from './hooks/useMagnetQuery'
-import { configActions } from './stores/configStore'
+import { configActions, getActiveDownloader } from './stores/configStore'
 
 export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -59,7 +59,10 @@ export default function Home() {
 
 const useLoadConfig = () => {
   useEffect(() => {
-    configActions.load()
+    void configActions.load().then(() => {
+      const active = getActiveDownloader()
+      if (active?.basePath) appStateActions.setBasePath(active.basePath)
+    })
   }, [])
 }
 

@@ -1,18 +1,13 @@
-export type DownloaderType = 'qbittorrent' | 'transmission'
+import 'server-only'
+import {
+  parseAppConfigJson,
+  toPublicDownloader,
+  type AppConfig,
+  type DownloaderConfig,
+  type PublicDownloader,
+} from './contracts'
 
-export interface DownloaderConfig {
-  name: string
-  url: string
-  username: string
-  password: string
-  type: DownloaderType
-  basePath: string
-  librarySuggestions: Record<string, boolean>
-}
-
-export interface AppConfig {
-  downloaders: DownloaderConfig[]
-}
+export type { AppConfig, DownloaderConfig, PublicDownloader }
 
 let cachedConfig: AppConfig | null = null
 
@@ -25,19 +20,14 @@ export function loadAppConfig(): AppConfig {
   }
 
   const decoded = Buffer.from(base64, 'base64').toString('utf8')
-  cachedConfig = JSON.parse(decoded) as AppConfig
-
-  if (!cachedConfig.downloaders?.length) {
-    throw new Error('APP_CONFIG_BASE64 must contain at least one downloader')
-  }
-
+  cachedConfig = parseAppConfigJson(decoded)
   console.log(`🔧 Loaded ${cachedConfig.downloaders.length} downloader(s) from config`)
   return cachedConfig
 }
 
 export function getDownloaderByName(name: string): DownloaderConfig {
   const config = loadAppConfig()
-  const downloader = config.downloaders.find((d) => d.name === name)
+  const downloader = config.downloaders.find((item) => item.name === name)
   if (!downloader) {
     throw new Error(`Downloader "${name}" not found in config`)
   }
@@ -45,18 +35,9 @@ export function getDownloaderByName(name: string): DownloaderConfig {
 }
 
 export function getDefaultDownloader(): DownloaderConfig {
-  const config = loadAppConfig()
-  return config.downloaders[0]
+  return loadAppConfig().downloaders[0]
 }
 
-/** Returns downloaders without sensitive credentials (for client) */
-export function getPublicDownloaderList() {
-  const config = loadAppConfig()
-  return config.downloaders.map(({ name, url, type, basePath, librarySuggestions }) => ({
-    name,
-    url,
-    type,
-    basePath,
-    librarySuggestions,
-  }))
+export function getPublicDownloaderList(): PublicDownloader[] {
+  return loadAppConfig().downloaders.map(toPublicDownloader)
 }

@@ -3,7 +3,6 @@ import { proxy, subscribe } from 'valtio'
 interface QueryHistoryState {
   history: string[]
   candidateQuery: string | null
-  isLoading: boolean
 }
 
 const STORAGE_KEY = 'bunch-of-magnets-query-history'
@@ -28,7 +27,6 @@ const loadHistory = (): string[] => {
 const initialState: QueryHistoryState = {
   history: typeof window !== 'undefined' ? loadHistory() : [],
   candidateQuery: null,
-  isLoading: false,
 }
 
 export const queryHistoryStore = proxy<QueryHistoryState>(initialState)

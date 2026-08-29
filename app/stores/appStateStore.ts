@@ -1,6 +1,6 @@
 import { proxy, useSnapshot } from 'valtio'
 import { parseFirstTvShowName, parseSeasons } from '../services/tvShowService'
-import { MagnetLink } from '../utils/magnet'
+import { dedupeMagnetLinks, MagnetLink } from '../utils/magnet'
 import {
   applySavePathSuggestion,
   buildSavePath,
@@ -10,8 +10,6 @@ import {
   moveSavePathToBase,
   SavePathSelection,
 } from '../utils/savePath'
-import { configStore, getActiveDownloader } from './configStore'
-import { getLibrarySuggestionsForDownloader, settingsStore } from './settingsStore'
 import { toast } from './toastStore'
 
 type SuggestionPill = {
@@ -105,13 +103,12 @@ const updateSuggestionsFromMagnetLinks = async (magnetLinks: readonly MagnetLink
 }
 
 export const appStateActions = {
-  addMagnetLinks: async (links: readonly MagnetLink[]) => {
-    const existingUrls = new Set(appStateStore.magnetLinks.map((link) => link.magnetUrl))
-    const newLinks = links.filter((link) => !existingUrls.has(link.magnetUrl))
+  addMagnetLinks: (links: readonly MagnetLink[]) => {
+    const newLinks = dedupeMagnetLinks(appStateStore.magnetLinks, links)
     appStateStore.magnetLinks.unshift(...newLinks)
 
     if (newLinks.length > 0) {
-      await updateSuggestionsFromMagnetLinks(newLinks)
+      void updateSuggestionsFromMagnetLinks(newLinks)
     }
   },
 
@@ -199,29 +196,7 @@ export const appStateActions = {
 
 export const useAppState = () => useSnapshot(appStateStore)
 
-const getEffectiveLibrarySuggestions = () => {
-  const activeDownloader = getActiveDownloader()
-  return activeDownloader
-    ? getLibrarySuggestionsForDownloader(activeDownloader.url, activeDownloader.librarySuggestions)
-    : {}
-}
 
-/** Subscribe to settings that determine the active downloader's library folders. */
-const useEffectiveLibrarySuggestions = () => {
-  useSnapshot(settingsStore)
-  useSnapshot(configStore)
-
-  return getEffectiveLibrarySuggestions()
-}
-
-export const getAllSuggestionsSnapshot = () => {
-  const appState = useSnapshot(appStateStore)
-  const librarySuggestions = Object.entries(useEffectiveLibrarySuggestions())
-    .filter(([_, enabled]) => enabled)
-    .map(([value]) => ({ type: 'library' as const, value }))
-
-  return [...librarySuggestions, ...appState.dynamicSuggestions]
-}
 
 /** Show or movie name currently selected; empty until the user picks one */
 export const useSavePathTitle = () => {

@@ -37,6 +37,27 @@ export function extractInfoHash(magnetUrl: string): string | null {
   return null
 }
 
+/** Stable identity for a magnet: v1 infohash when present, otherwise the raw URL. */
+export function magnetIdentity(magnetUrl: string): string {
+  return extractInfoHash(magnetUrl) ?? magnetUrl
+}
+
+/** Drops incoming magnets whose identity already exists in `existing` or earlier in `incoming`. */
+export function dedupeMagnetLinks(
+  existing: readonly MagnetLink[],
+  incoming: readonly MagnetLink[]
+): MagnetLink[] {
+  const seen = new Set(existing.map((link) => magnetIdentity(link.magnetUrl)))
+  const unique: MagnetLink[] = []
+  for (const link of incoming) {
+    const identity = magnetIdentity(link.magnetUrl)
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    unique.push(link)
+  }
+  return unique
+}
+
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number

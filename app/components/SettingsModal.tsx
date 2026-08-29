@@ -1,7 +1,8 @@
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
 import { useSnapshot } from 'valtio'
-import { configActions, configStore, getActiveDownloader } from '../stores/configStore'
+import { appStateActions } from '../stores/appStateStore'
+import { configStore, getActiveDownloader } from '../stores/configStore'
 import {
   getLibrarySuggestionsForDownloader,
   settingsActions,
@@ -67,7 +68,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                     key={downloader.name}
                     onClick={() => {
                       settingsActions.setSelectedDownloader(downloader.name)
-                      configActions.updateBasePath()
+                      appStateActions.setBasePath(downloader.basePath)
                     }}
                     className={`w-full flex items-center justify-between p-0.5 pl-2 pr-1 rounded-md transition-colors ${
                       effectiveSelection === downloader.name

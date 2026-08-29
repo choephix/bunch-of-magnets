@@ -1,38 +1,12 @@
 import { getDefaultDownloader, getDownloaderByName } from '@/app/lib/appConfig'
-import {
-  fetchWithTimeout,
-  stripTrailingSlash,
-  withQbittorrentSession,
-} from '@/app/lib/qbittorrent'
+import { getDownloaderProgress, DownloaderNotSupportedError } from '@/app/lib/downloader'
+import { unauthorizedIfAnonymous } from '@/app/lib/requireAuth'
 import { NextResponse } from 'next/server'
 
-export type TorrentProgress = {
-  hash: string
-  name: string
-  progress: number
-  state: string
-  dlspeed: number
-  eta: number
-  size: number
-  numSeeds: number
-  numPeers: number
-  addedOn: number
-}
-
-const toTorrentProgress = (torrent: Record<string, unknown>): TorrentProgress => ({
-  hash: String(torrent.hash ?? ''),
-  name: String(torrent.name ?? ''),
-  progress: Number(torrent.progress ?? 0),
-  state: String(torrent.state ?? 'unknown'),
-  dlspeed: Number(torrent.dlspeed ?? 0),
-  eta: Number(torrent.eta ?? 0),
-  size: Number(torrent.size ?? 0),
-  numSeeds: Number(torrent.num_seeds ?? 0),
-  numPeers: Number(torrent.num_leechs ?? 0),
-  addedOn: Number(torrent.added_on ?? 0),
-})
-
 export async function GET(request: Request) {
+  const unauthorized = await unauthorizedIfAnonymous()
+  if (unauthorized) return unauthorized
+
   try {
     const { searchParams } = new URL(request.url)
     const hashes = (searchParams.get('hashes') ?? '')
@@ -47,42 +21,13 @@ export async function GET(request: Request) {
     }
 
     const downloader = downloaderName ? getDownloaderByName(downloaderName) : getDefaultDownloader()
-
-    if (downloader.type === 'transmission') {
-      return NextResponse.json(
-        { error: 'Transmission support not implemented yet' },
-        { status: 501 }
-      )
-    }
-
-    const base = stripTrailingSlash(downloader.url)
-
-    const { torrents, recent } = await withQbittorrentSession(downloader, async (cookie) => {
-      const fetchInfo = async (query: string): Promise<TorrentProgress[]> => {
-        const response = await fetchWithTimeout(`${base}/api/v2/torrents/info?${query}`, {
-          headers: { Cookie: cookie },
-          cache: 'no-store',
-        })
-        if (!response.ok) {
-          throw new Error(`qBittorrent returned ${response.status}`)
-        }
-        const raw = (await response.json()) as Array<Record<string, unknown>>
-        return raw.map(toTorrentProgress)
-      }
-
-      const [tracked, recentList] = await Promise.all([
-        hashes.length ? fetchInfo(`hashes=${hashes.join('|')}`) : Promise.resolve([]),
-        recentLimit > 0
-          ? fetchInfo(`sort=added_on&reverse=true&limit=${Math.min(recentLimit, 50)}`)
-          : Promise.resolve([]),
-      ])
-
-      return { torrents: tracked, recent: recentList }
-    })
-
+    const { torrents, recent } = await getDownloaderProgress(downloader, hashes, recentLimit)
     return NextResponse.json({ torrents, recent })
   } catch (error) {
     console.error('❌ Error fetching torrent progress:', error)
+    if (error instanceof DownloaderNotSupportedError) {
+      return NextResponse.json({ error: error.message }, { status: 501 })
+    }
     const message = error instanceof Error ? error.message : 'Failed to fetch progress'
     const timedOut = /timed out/i.test(message)
     return NextResponse.json({ error: message }, { status: timedOut ? 504 : 500 })

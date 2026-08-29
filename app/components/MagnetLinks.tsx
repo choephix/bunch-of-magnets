@@ -7,7 +7,7 @@ import { HistoryModal } from './HistoryModal'
 import { MagnetExtractionLoader } from './MagnetExtractionLoader'
 
 interface MagnetLinksProps {
-  onSubmit: (e: React.FormEvent) => Promise<void>
+  onSubmit: () => Promise<boolean>
   isLoading: boolean
 }
 
@@ -38,10 +38,10 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
     []
   )
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async () => {
     if (!canAdd) return
-    await onSubmit(e)
-    queryHistoryActions.saveCandidateToHistory()
+    const submitted = await onSubmit()
+    if (submitted) queryHistoryActions.saveCandidateToHistory()
   }
 
   const handleHistorySelect = (query: string) => {

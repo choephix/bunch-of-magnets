@@ -92,4 +92,11 @@ export const buildSavePath = (selection: SavePathSelection): string => {
 
 /** Submit is allowed only when a show or movie name has been selected. */
 export const canAddTorrents = (selection: SavePathSelection): boolean =>
- Boolean(selection.title && selection.title.trim().length > 0)
+  Boolean(selection.title && selection.title.trim().length > 0)
+
+/** qBittorrent category is the library folder when the user picked one. */
+export const deriveCategory = (selection: SavePathSelection): string => {
+  const library = selection.library?.trim()
+  if (!library || library === PLACEHOLDER) return ''
+  return library
+}
