@@ -45,8 +45,9 @@ export async function addTorrents(
 
   const data = addTorrentsResponseSchema.parse(await readJsonOrThrow(response))
 
-  if (!response.ok || !data.results[0]?.success) {
-    throw new Error(data.results[0]?.error || data.error || 'Failed to add torrents')
+  const first = data.results?.[0]
+  if (!response.ok || !first?.success) {
+    throw new Error(first?.error || data.error || `Failed to add torrents (HTTP ${response.status})`)
   }
 
   const hashes = data.hashes ?? []

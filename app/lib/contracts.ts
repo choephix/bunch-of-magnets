@@ -41,13 +41,15 @@ export const addTorrentsRequestSchema = z.object({
 })
 
 export const addTorrentsResponseSchema = z.object({
-  results: z.array(
-    z.object({
-      success: z.boolean().optional(),
-      error: z.string().optional(),
-      data: z.unknown().optional(),
-    })
-  ),
+  results: z
+    .array(
+      z.object({
+        success: z.boolean().optional(),
+        error: z.string().optional(),
+        data: z.unknown().optional(),
+      })
+    )
+    .optional(),
   hashes: z.array(z.string()).optional(),
   error: z.string().optional(),
 })
