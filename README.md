@@ -32,6 +32,11 @@ Torrent bars show downloaded content, not the progress of a file-checking pass.
 Finished torrents remain at 100% when seeding, stopped, or rechecking; metadata
 fetching does not fill the download bar.
 
+The progress panel stacks successful additions for this page session, oldest first,
+without duplicate hashes. Each downloader has its own tracked list: switching
+downloaders shows that client's list, and switching back restores its rows. Reloading
+the page clears these lists.
+
 ## For Developers
 
 ### Prerequisites

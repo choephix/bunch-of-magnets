@@ -49,7 +49,11 @@ export default function Home() {
 
         <StatusMessage status={status} />
 
-        <TorrentProgressPanel hashes={trackedHashes} downloaderName={downloaderName} />
+        <TorrentProgressPanel
+          key={downloaderName}
+          hashes={trackedHashes}
+          downloaderName={downloaderName}
+        />
       </main>
 
       <ToastContainer />

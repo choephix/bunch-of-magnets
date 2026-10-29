@@ -1,33 +1,42 @@
 import { useState } from 'react'
+import { useSnapshot } from 'valtio'
 import { MagnetLink, extractInfoHash, parseTags } from '../utils/magnet'
 import { addTorrents } from '../services/qbittorrentService'
 import { appStateActions, appStateStore } from '../stores/appStateStore'
-import { getActiveDownloader } from '../stores/configStore'
+import { configStore, getActiveDownloader } from '../stores/configStore'
+import { settingsStore } from '../stores/settingsStore'
 import { deriveCategory } from '../utils/savePath'
+import { trackAddedTorrents } from '../utils/trackedTorrents'
 
 interface UseMagnetSubmissionResult {
   isLoading: boolean
   status: { type: 'success' | 'error'; message: string } | null
-  trackedHashes: string[]
+  trackedHashes: readonly string[]
   downloaderName: string | undefined
   submitMagnetLinks: (magnetLinks: MagnetLink[], savePath: string) => Promise<boolean>
 }
 
 export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
+  useSnapshot(configStore)
+  useSnapshot(settingsStore)
+
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [trackedHashes, setTrackedHashes] = useState<string[]>([])
-  const [downloaderName, setDownloaderName] = useState<string | undefined>(undefined)
+  const [trackedByDownloader, setTrackedByDownloader] = useState<
+    ReadonlyMap<string, readonly string[]>
+  >(() => new Map())
+  const downloaderName = getActiveDownloader()?.name
+  const trackedHashes = (downloaderName && trackedByDownloader.get(downloaderName)) || []
 
   const submitMagnetLinks = async (magnetLinks: MagnetLink[], savePath: string) => {
     setIsLoading(true)
     setStatus(null)
-    setTrackedHashes([])
 
     try {
       console.log('🚀 Starting to add torrents:', magnetLinks.length)
       const selectedLinks = magnetLinks.filter((link) => !link.ignore)
       const activeDownloader = getActiveDownloader()
+      if (!activeDownloader) throw new Error('No downloader configured')
 
       const allTags = selectedLinks
         .flatMap((link) => parseTags(link.displayName))
@@ -40,7 +49,7 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
         savePath,
         category,
         allTags,
-        activeDownloader?.name
+        activeDownloader.name
       )
 
       const hashes =
@@ -50,8 +59,9 @@ export const useMagnetSubmission = (): UseMagnetSubmissionResult => {
               .map((link) => extractInfoHash(link.magnetUrl))
               .filter((hash): hash is string => Boolean(hash))
 
-      setTrackedHashes(hashes)
-      setDownloaderName(activeDownloader?.name)
+      setTrackedByDownloader((tracked) =>
+        trackAddedTorrents(tracked, activeDownloader.name, hashes)
+      )
       appStateActions.clearMagnetLinks()
       return true
     } catch (error) {

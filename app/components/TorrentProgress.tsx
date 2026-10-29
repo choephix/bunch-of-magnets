@@ -244,7 +244,7 @@ export const TorrentProgressPanel = ({
         // Keep polling while the recent list is visible so it stays live.
         if (!showRecent) {
           const allComplete =
-            result.torrents.length > 0 &&
+            result.torrents.length === trackedHashes.length &&
             result.torrents.every(
               (torrent) => torrent.progress >= 1 && !torrent.state.startsWith('checking')
             )
@@ -315,7 +315,9 @@ export const TorrentProgressPanel = ({
 
   const aggregate =
     hashes.length > 0
-      ? (torrents.reduce((sum, torrent) => sum + torrent.progress, 0) / hashes.length) * 100
+      ? (hashes.reduce((sum, hash) => sum + (byHash.get(hash.toLowerCase())?.progress ?? 0), 0) /
+          hashes.length) *
+        100
       : 0
 
   return (
