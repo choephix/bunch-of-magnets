@@ -3,11 +3,8 @@ import 'server-only'
 import { extractInfoHash } from '@/app/utils/magnet'
 import type { DownloaderConfig } from './appConfig'
 import type { AddTorrentsRequest, TorrentProgress } from './contracts'
-import {
-  fetchWithTimeout,
-  stripTrailingSlash,
-  withQbittorrentSession,
-} from './qbittorrent'
+import { toTorrentProgress } from './torrentProgress'
+import { fetchWithTimeout, stripTrailingSlash, withQbittorrentSession } from './qbittorrent'
 
 export class DownloaderNotSupportedError extends Error {
   readonly status = 501
@@ -29,23 +26,8 @@ export type DownloaderProgressResult = {
   recent: TorrentProgress[]
 }
 
-const toTorrentProgress = (torrent: Record<string, unknown>): TorrentProgress => ({
-  hash: String(torrent.hash ?? ''),
-  name: String(torrent.name ?? ''),
-  progress: Number(torrent.progress ?? 0),
-  state: String(torrent.state ?? 'unknown'),
-  dlspeed: Number(torrent.dlspeed ?? 0),
-  eta: Number(torrent.eta ?? 0),
-  size: Number(torrent.size ?? 0),
-  numSeeds: Number(torrent.num_seeds ?? 0),
-  numPeers: Number(torrent.num_leechs ?? 0),
-  addedOn: Number(torrent.added_on ?? 0),
-})
-
 const hashesFromMagnets = (magnetLinks: string[]): string[] =>
-  magnetLinks
-    .map((url) => extractInfoHash(url))
-    .filter((hash): hash is string => Boolean(hash))
+  magnetLinks.map((url) => extractInfoHash(url)).filter((hash): hash is string => Boolean(hash))
 
 async function addToQbittorrent(
   downloader: DownloaderConfig,

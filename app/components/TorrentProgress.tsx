@@ -14,15 +14,6 @@ const MAX_EMPTY_POLLS = 20
 /** qBittorrent reports this ETA when it has no estimate yet. */
 const ETA_UNKNOWN = 8640000
 
-const COMPLETE_STATES: Record<string, true> = {
-  uploading: true,
-  stalledUP: true,
-  pausedUP: true,
-  queuedUP: true,
-  forcedUP: true,
-  checkingUP: true,
-}
-
 const METADATA_STATES: Record<string, true> = {
   metaDL: true,
   downloadingMetadata: true,
@@ -99,7 +90,7 @@ const TorrentRow = ({
   torrent: TorrentProgress
   showAge?: boolean
 }) => {
-  const isComplete = torrent.progress >= 1 || torrent.state in COMPLETE_STATES
+  const isComplete = torrent.progress >= 1
   const isFetchingMetadata = !isComplete && torrent.state in METADATA_STATES
 
   return (
@@ -117,15 +108,12 @@ const TorrentRow = ({
         </span>
       </div>
       <div className="h-2 w-full rounded-full bg-gray-700 overflow-hidden">
-        {isFetchingMetadata ? (
-          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 animate-pulse" />
-        ) : (
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
-              }`}
-            style={{ width: `${Math.min(100, torrent.progress * 100)}%` }}
-          />
-        )}
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            isComplete ? 'bg-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
+          }`}
+          style={{ width: `${Math.min(100, torrent.progress * 100)}%` }}
+        />
       </div>
       <div className="text-xs text-gray-400 flex items-center flex-wrap gap-x-3 gap-y-0.5">
         <span>{isFetchingMetadata ? 'Fetching metadata…' : humanizeState(torrent.state)}</span>
@@ -146,9 +134,7 @@ const PlaceholderRow = ({ hash }: { hash: string }) => (
       </span>
       <span className="text-xs text-gray-500 flex-shrink-0">Queued…</span>
     </div>
-    <div className="h-2 w-full rounded-full bg-gray-700 overflow-hidden">
-      <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 animate-pulse" />
-    </div>
+    <div className="h-2 w-full rounded-full bg-gray-700" />
   </div>
 )
 
@@ -258,7 +244,10 @@ export const TorrentProgressPanel = ({
         // Keep polling while the recent list is visible so it stays live.
         if (!showRecent) {
           const allComplete =
-            result.torrents.length > 0 && result.torrents.every((torrent) => torrent.progress >= 1)
+            result.torrents.length > 0 &&
+            result.torrents.every(
+              (torrent) => torrent.progress >= 1 && !torrent.state.startsWith('checking')
+            )
           if (allComplete || emptyPollsRef.current >= MAX_EMPTY_POLLS) {
             stop()
             return
@@ -291,7 +280,13 @@ export const TorrentProgressPanel = ({
   }, [torrents])
 
   const trackedSet = useMemo(
-    () => new Set(hashKey.split(',').filter(Boolean).map((hash) => hash.toLowerCase())),
+    () =>
+      new Set(
+        hashKey
+          .split(',')
+          .filter(Boolean)
+          .map((hash) => hash.toLowerCase())
+      ),
     [hashKey]
   )
 
@@ -408,11 +403,7 @@ export const TorrentProgressPanel = ({
           </button>
         )}
 
-        {downloader ? (
-          <OpenDownloaderLink url={downloader.url} name={downloader.name} />
-        ) : (
-          <span />
-        )}
+        {downloader ? <OpenDownloaderLink url={downloader.url} name={downloader.name} /> : <span />}
       </div>
     </div>
   )

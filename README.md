@@ -28,6 +28,10 @@ using the typed destination as its root; smart paths require a title. Empty path
 and unresolved `_` placeholders cannot be submitted. Changing downloaders replaces
 a manual destination with the new downloader's base path.
 
+Torrent bars show downloaded content, not the progress of a file-checking pass.
+Finished torrents remain at 100% when seeding, stopped, or rechecking; metadata
+fetching does not fill the download bar.
+
 ## For Developers
 
 ### Prerequisites
