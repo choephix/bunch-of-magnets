@@ -27,10 +27,14 @@ export const SaveDir = () => {
         id="savePath"
         value={inputValue}
         onChange={handleChange}
+        aria-describedby="savePath-help"
         className="w-full p-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
         placeholder="/path/to/save/directory"
         required
       />
+      <p id="savePath-help" className="mt-1 text-xs text-gray-400">
+        Type a destination to use it as-is, or click suggestions to build a path.
+      </p>
     </div>
   )
 }

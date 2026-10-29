@@ -115,10 +115,12 @@ pnpm test     # node:test unit tests (app/**/*.test.ts)
 
 ### Adding Torrents
 
-1. User configures save path via suggestions
+1. User configures save path via suggestions or types a complete destination
 2. Selects target downloader (settings)
-3. Add button stays disabled until a show/movie name is selected
-   (`canAddTorrents` in `app/utils/savePath.ts`)
+3. Add accepts a nonempty manual destination without unresolved `_` path segments,
+   or a suggestion-built path with a selected show/movie name
+   (`canAddTorrents` in `app/utils/savePath.ts`). Suggestion clicks resume smart
+   path building; downloader changes discard manual destinations.
 4. `qbittorrent` API authenticates and batch-adds all magnets
 
 ## Notes

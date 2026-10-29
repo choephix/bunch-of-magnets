@@ -19,8 +19,14 @@ Live at [bunch-of-magnets.vercel.app](https://bunch-of-magnets.vercel.app)
 1. Visit [bunch-of-magnets.vercel.app](https://bunch-of-magnets.vercel.app)
 2. Enter the provided password
 3. Paste magnet links or URLs containing magnet links
-4. Pick suggestion pills / configure save path if needed
+4. Type a save directory to use it as-is, or pick suggestion pills to build a path
 5. Click `Add Torrents` to send them to your downloader
+
+Manually entered destinations (for example, `/media-library/kid-movies/`) do not
+require a show/movie title. Clicking a suggestion resumes smart path building,
+using the typed destination as its root; smart paths require a title. Empty paths
+and unresolved `_` placeholders cannot be submitted. Changing downloaders replaces
+a manual destination with the new downloader's base path.
 
 ## For Developers
 

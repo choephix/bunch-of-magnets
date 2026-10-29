@@ -135,14 +135,14 @@ export const MagnetLinks = ({ onSubmit, isLoading }: MagnetLinksProps) => {
             type="submit"
             onClick={handleSubmit}
             disabled={isLoading || !canAdd}
-            title={canAdd ? undefined : 'Pick a show or movie name first'}
+            title={canAdd ? undefined : 'Enter a save directory or pick a show or movie name'}
             className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-1.5 px-3 rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 
             disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl disabled:hover:shadow-none 
             cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900
             mt-3"
           >
             {!canAdd
-              ? 'Pick a show or movie name'
+              ? 'Enter a directory or pick a title'
               : isLoading
                 ? 'Adding...'
                 : `Add ${magnetLinks.filter((m) => !m.ignore).length} Torrents`}

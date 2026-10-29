@@ -66,8 +66,8 @@ test('every subset and ordering on configured base path produces canonical paths
 test('user edits existing path to /Downloads and clicks Name or Name + Season', () => {
   // 1. User manually edits path to /Downloads
   let sel = editSavePathRoot('/Downloads')
-  assert.equal(buildSavePath(sel), '/Downloads/_/')
-  assert.equal(canAddTorrents(sel), false)
+  assert.equal(buildSavePath(sel), '/Downloads')
+  assert.equal(canAddTorrents(sel), true)
 
   // 2. User clicks show name 'Silo'
   sel = applySavePathSuggestion(sel, ACTIONS.T)
@@ -99,15 +99,29 @@ test('user edits existing path to /Downloads and clicks Season before Name', () 
   assert.equal(canAddTorrents(sel), true)
 })
 
-test('editing the root clears previous selections', () => {
+test('manual destinations replace smart paths without retaining a category', () => {
   let sel = applyActions(['L', 'T', 'S'])
   assert.equal(buildSavePath(sel), '/media-library/tv/Silo/Season 3/')
   assert.equal(canAddTorrents(sel), true)
 
   // Manual edit to custom folder
-  sel = editSavePathRoot('/custom/path')
-  assert.equal(buildSavePath(sel), '/custom/path/_/')
-  assert.equal(canAddTorrents(sel), false)
+  sel = editSavePathRoot('kid-movies/')
+  assert.equal(buildSavePath(sel), 'kid-movies/')
+  assert.equal(canAddTorrents(sel), true)
+  assert.equal(deriveCategory(sel), '')
+})
+
+test('manual input cannot submit an empty destination or an unresolved placeholder', () => {
+  for (const path of ['', '   ', '/media-library/_/', '/media-library/_/Season 3/']) {
+    assert.equal(canAddTorrents(editSavePathRoot(path)), false, path)
+  }
+  assert.equal(canAddTorrents(editSavePathRoot('/media-library/kid_movies/')), true)
+})
+
+test('switching downloaders discards a manual destination and requires a new selection', () => {
+  const moved = moveSavePathToBase(editSavePathRoot('kid-movies/'), '/other-downloads/')
+  assert.equal(buildSavePath(moved), '/other-downloads/_/')
+  assert.equal(canAddTorrents(moved), false)
 })
 
 test('later clicks replace their own selection without disturbing others', () => {
