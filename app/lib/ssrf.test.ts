@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
-import { assertPublicHttpUrl, isPrivateIp, UnsafeUrlError } from './ssrf.ts'
+import { test, mock } from 'node:test'
+import { assertPublicHttpUrl, fetchPublicHttpText, isPrivateIp, UnsafeUrlError } from './ssrf.ts'
 
 test('isPrivateIp flags loopback, RFC1918, link-local, CGNAT, and IPv6 local', () => {
   for (const ip of [
@@ -58,4 +58,34 @@ test('assertPublicHttpUrl rejects hostnames that resolve privately', async () =>
     () => assertPublicHttpUrl('https://internal.example', async () => ['10.0.0.5']),
     UnsafeUrlError
   )
+})
+
+test('assertPublicHttpUrl turns a failed DNS lookup into UnsafeUrlError', async () => {
+  await assert.rejects(
+    () =>
+      assertPublicHttpUrl('http://axalon:7070/a', async () => {
+        throw new Error('getaddrinfo EBUSY axalon')
+      }),
+    UnsafeUrlError
+  )
+})
+
+test('fetchPublicHttpText returns the magnet a download link redirects to', async () => {
+  const magnet = 'magnet:?xt=urn:btih:7E1AEB097ED2E198BE537F49956B3FADFAFB7463&dn=x'
+  mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response(null, { status: 303, headers: { location: magnet } })
+  )
+  try {
+    const fetched = await fetchPublicHttpText(
+      'https://indexer.example/get',
+      {},
+      1_000,
+      async () => ['1.1.1.1']
+    )
+    assert.deepEqual(fetched, { kind: 'magnet', magnet })
+  } finally {
+    mock.restoreAll()
+  }
 })

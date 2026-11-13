@@ -36,10 +36,17 @@ export async function POST(request: Request) {
 
     console.log(`🌐 [extract-magnets] Fetching root URL: "${url}"`)
     const fetchStart = performance.now()
-    const { url: finalUrl, contentType, text } = await fetchPublicHttpText(url, {
+    const fetched = await fetchPublicHttpText(url, {
       headers: { 'User-Agent': USER_AGENT },
     })
     const fetchDurationMs = performance.now() - fetchStart
+    if (fetched.kind === 'magnet') {
+      console.log(
+        `🧲 [extract-magnets] URL redirected to a magnet in ${fetchDurationMs.toFixed(0)}ms`
+      )
+      return NextResponse.json({ magnetLinks: parseMagnetLinks(fetched.magnet) })
+    }
+    const { url: finalUrl, contentType, text } = fetched
     console.log(
       `📥 [extract-magnets] Fetched URL in ${fetchDurationMs.toFixed(0)}ms (${(text.length / 1024).toFixed(1)} KB, type: "${contentType}")`
     )
@@ -194,7 +201,9 @@ async function extractMagnetLinksFromAllHtmlUrls(
     })
 
   const uniqueTorrentUrls = [...new Set(torrentUrls)].slice(0, MAX_TORRENT_PAGES)
-  console.log(`🔗 [extract-magnets] Found ${uniqueTorrentUrls.length} potential torrent subpage URL(s)`)
+  console.log(
+    `🔗 [extract-magnets] Found ${uniqueTorrentUrls.length} potential torrent subpage URL(s)`
+  )
 
   if (uniqueTorrentUrls.length === 0) {
     return []
@@ -203,10 +212,11 @@ async function extractMagnetLinksFromAllHtmlUrls(
   const fetchPage = async (pageUrl: string): Promise<string | null> => {
     const pageStart = performance.now()
     try {
-      const { text } = await fetchPublicHttpText(pageUrl, {
+      const fetched = await fetchPublicHttpText(pageUrl, {
         headers: { 'User-Agent': USER_AGENT },
       })
-      const magnets = extractMagnetUrlsFromHtml(text)
+      const magnets =
+        fetched.kind === 'magnet' ? [fetched.magnet] : extractMagnetUrlsFromHtml(fetched.text)
       const pageDurationMs = performance.now() - pageStart
       console.log(
         `📥 [extract-magnets] Fetched subpage in ${pageDurationMs.toFixed(0)}ms (${magnets.length} magnets): ${pageUrl}`

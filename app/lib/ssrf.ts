@@ -29,7 +29,10 @@ export function isPrivateIp(ip: string): boolean {
 
 const isPrivateIpv4 = (ip: string): boolean => {
   const parts = ip.split('.').map((part) => Number(part))
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
     return true
   }
   const [a, b] = parts
@@ -91,9 +94,9 @@ export async function assertPublicHttpUrl(
     return url
   }
 
-  const addresses = await resolve(hostname)
+  const addresses = await resolve(hostname).catch((): string[] => [])
   if (!addresses.length) {
-    throw new UnsafeUrlError('Could not resolve hostname')
+    throw new UnsafeUrlError(`Could not resolve hostname "${hostname}"`)
   }
   for (const address of addresses) {
     if (isPrivateIp(address)) {
@@ -145,12 +148,17 @@ async function readCappedText(response: Response): Promise<string> {
   return new TextDecoder().decode(concatBytes(chunks))
 }
 
+/** A page body, or the magnet a download link redirected to (Prowlarr's download links do this). */
+export type FetchedResource =
+  | { kind: 'magnet'; magnet: string }
+  | { kind: 'page'; url: string; contentType: string; text: string }
+
 export async function fetchPublicHttpText(
   rawUrl: string,
   init: RequestInit = {},
   timeoutMs = 12_000,
   resolve: ResolveAddresses = defaultResolve
-): Promise<{ url: string; contentType: string; text: string }> {
+): Promise<FetchedResource> {
   let current = (await assertPublicHttpUrl(rawUrl, resolve)).toString()
 
   for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
@@ -172,6 +180,9 @@ export async function fetchPublicHttpText(
         if (!location) {
           throw new UnsafeUrlError('Redirect missing Location header')
         }
+        if (/^magnet:/i.test(location)) {
+          return { kind: 'magnet', magnet: location }
+        }
         const next = new URL(location, current).toString()
         current = (await assertPublicHttpUrl(next, resolve)).toString()
         continue
@@ -179,6 +190,7 @@ export async function fetchPublicHttpText(
 
       const text = await readCappedText(response)
       return {
+        kind: 'page',
         url: current,
         contentType: response.headers.get('content-type') ?? '',
         text,
